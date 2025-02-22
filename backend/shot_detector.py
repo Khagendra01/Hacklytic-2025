@@ -68,10 +68,14 @@ class ShotDetector:
         self.shot_metrics = []  # Will store metrics for each shot
 
         # Add video writer setup
-        self.output_path = 'output_video.mp4'
+        self.output_path = 'backend/noisy_images/analysis.mp4'  # Changed path
         frame = self.cap.read()[1]  # Read first frame to get dimensions
         self.frame_width = int(frame.shape[1])
         self.frame_height = int(frame.shape[0])
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
+        
         self.out = cv2.VideoWriter(
             self.output_path,
             cv2.VideoWriter_fourcc(*'mp4v'),
@@ -85,7 +89,7 @@ class ShotDetector:
 
         try:
             release_angle, follow_through_angle, left_feet_heights, right_feet_heights, shot_metrics = self.run()
-            
+            self.shot_metrics = shot_metrics
             print(f'\nShooting Form Analysis:')
             print(f'Shot Trajectory: {release_angle:.1f}° (Ideal: 45-55°)')
             print(f'Follow Through Angle: {follow_through_angle:.1f}°')
@@ -144,6 +148,7 @@ class ShotDetector:
             left_release_height = np.mean(left_feet_heights[0:50]) - left_feet_heights[-1]
             right_release_height = np.mean(right_feet_heights[0:50]) - right_feet_heights[-1]
             print(f'RELEASE HEIGHT: {np.mean([left_release_height, right_release_height]):.1f}')
+
             
         except Exception as e:
             print(f"\nAn error occurred: {str(e)}")
@@ -568,5 +573,5 @@ if __name__ == "__main__":
     print("MASKED SHOT CREATED")
     
     # Now that noise reduction is complete, run shot detection
-    ShotDetector()
-
+    detector = ShotDetector()  
+    print('SHOT METRICS FROM DETECTOR', detector.shot_metrics)

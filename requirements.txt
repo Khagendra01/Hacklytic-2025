@@ -5,4 +5,6 @@ opencv-python
 numpy
 cvzone
 ultralytics
-mediapipe==0.10.9 
+mediapipe==0.10.9
+google-cloud-aiplatform
+google-ai-generativelanguage 
