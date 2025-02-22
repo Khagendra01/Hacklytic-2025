@@ -1,0 +1,8 @@
+# Remove or comment out the older version
+# certifi==2023.5.7
+certifi
+opencv-python
+numpy
+cvzone
+ultralytics
+mediapipe==0.10.9 
