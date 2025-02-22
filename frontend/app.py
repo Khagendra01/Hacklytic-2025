@@ -1,60 +1,117 @@
-import streamlit as st
-import sys
 import os
-sys.path.append('../backend')
+import sys
+import time
+from pathlib import Path
 
-from preprocessing.noise_masking import isort
-from shot_detector import analyze_shot
-from agents.quick_analysis import get_coach_feedback
-import tempfile
+import cv2
+import streamlit as st
+from PIL import Image
+
+# Add backend to path
+backend_path = Path(__file__).parent.parent / "backend"
+sys.path.append(str(backend_path))
+
+from preprocessing.noise_masking import NoiseReducer
+from shot_detector import ShotDetector
+from agents.quick_analysis_agent import QuickAnalysisAgent
+
+def create_temp_dirs():
+    """Create temporary directories if they don't exist"""
+    os.makedirs("backend/noisy_images", exist_ok=True)
+    os.makedirs("temp_uploads", exist_ok=True)
+
+def save_uploaded_file(uploaded_file):
+    """Save uploaded file to temporary directory"""
+    file_path = os.path.join("temp_uploads", uploaded_file.name)
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return file_path
+
+def display_video(video_path, width=None):
+    """Display video in Streamlit"""
+    video_file = open(video_path, 'rb')
+    video_bytes = video_file.read()
+    if width:
+        st.video(video_bytes, width=width)
+    else:
+        st.video(video_bytes)
 
 def main():
     st.title("Basketball Shot Analysis")
     
-    # File uploader
-    uploaded_file = st.file_uploader("Upload your basketball shot video", type=['mp4', 'mov'])
+    # Create necessary directories
+    create_temp_dirs()
     
-    if uploaded_file is not None:
-        # Create a temporary file to save the upload
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            video_path = tmp_file.name
-
-        # Create two columns for videos
-        col1, col2 = st.columns(2)
+    # File uploader
+    uploaded_file = st.file_uploader("Upload your basketball shot video", type=['mp4', 'mov', 'avi'])
+    
+    if uploaded_file:
+        # Save uploaded file
+        input_path = save_uploaded_file(uploaded_file)
         
-        with st.spinner('Processing your video...'):
-            # Step 1: Noise masking
-            isort(video_path)
+        # Initialize progress tracking
+        progress_text = "Operation in progress. Please wait..."
+        progress_bar = st.progress(0, text=progress_text)
+        
+        try:
+            # Create two columns for video display
+            col1, col2 = st.columns(2)
             
-            # Show masked video immediately after processing
             with col1:
-                st.subheader("Masked Video")
-                st.video('./noisy_images/masked_spot.mp4')
+                st.subheader("Original Video")
+                display_video(input_path)
             
-            # Step 2: Shot detection and analysis
-            analysis_metrics = analyze_shot()
+            # Process video with noise masking
+            noise_reducer = NoiseReducer()
+            masked_video_path = "backend/noisy_images/masked_shot.mp4"
             
-            # Step 3: Get coach feedback
-            feedback = get_coach_feedback()
+            with st.spinner("Processing video..."):
+                # Run noise reduction
+                import asyncio
+                asyncio.run(noise_reducer.process_video(input_path, masked_video_path))
+                progress_bar.progress(33, text="Noise masking complete...")
+                
+                with col2:
+                    st.subheader("Masked Video")
+                    display_video(masked_video_path)
+                
+                # Run shot detection
+                detector = ShotDetector()
+                progress_bar.progress(66, text="Shot detection complete...")
+                
+                # Run quick analysis
+                analyzer = QuickAnalysisAgent()
+                analysis = analyzer.analyze_form(detector.shot_metrics)
+                progress_bar.progress(100, text="Analysis complete!")
+                
+                # Display analysis results
+                st.subheader("Analysis Results")
+                
+                # Create expandable sections for recommendations and reasoning
+                with st.expander("Coach Recommendations", expanded=True):
+                    recommendations = analysis["coach_recommendations"].split("||")
+                    for rec in recommendations:
+                        st.write(rec.strip())
+                
+                with st.expander("Detailed Analysis"):
+                    reasoning = analysis["coach_reasoning"].split("||")
+                    for reason in reasoning:
+                        st.write(reason.strip())
+                
+                # Display shot metrics in a table
+                if detector.shot_metrics:
+                    st.subheader("Shot Metrics")
+                    metrics_df = pd.DataFrame(detector.shot_metrics)
+                    st.dataframe(metrics_df)
+                
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+            
+        finally:
+            # Cleanup
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            progress_bar.empty()
 
-            # Show analysis video in second column
-            with col2:
-                st.subheader("Analysis Visualization")
-                st.video('./noisy_images/analysis.mp4')
-
-        # Display results
-        st.success('Analysis complete!')
-        
-        # Display coach recommendations
-        st.subheader("Coach Recommendations")
-        st.write(feedback['coach_recommendation'])
-        
-        st.subheader("Detailed Reasoning")
-        st.write(feedback['coach_reasoning'])
-
-        # Cleanup
-        os.unlink(video_path)
-        
 if __name__ == "__main__":
     main() 
