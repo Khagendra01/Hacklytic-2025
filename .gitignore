@@ -13,7 +13,7 @@ db.sqlite3
 *.py[cod]
 *.so
 *.DS_Store
-*firebaseConfig.js
+*firebase.js
 # React
 node_modules/
 build/

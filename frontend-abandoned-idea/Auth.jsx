@@ -18,6 +18,7 @@ const Auth = () => {
 
   onAuthStateChanged(auth, (currentUser) => {
     setUser(currentUser);
+    console.log(currentUser);
   });
 
   const handleEmailChange = (e) => {

@@ -1,6 +1,7 @@
 backend/preprocessing/noise_masking.py: Saves the masked video in ./noisy_images/masked_spot.mp4 path when a video file path is parsed to isort
 backend/shot_detector.py: Saves analysis video to ./noisy_images/analysis.mp4 with limb by limb construction and returns analysis metrics in 
-
-
-
-In progress:
+backend/agents/quick_analysis.py: Gets the analysied video from ./noisy_images/analysis.mp4 and analysis metrics in a dictionary format (example given) and returns:
+{
+'coach_recommendation': string,
+'coach_reasoning': string
+}
