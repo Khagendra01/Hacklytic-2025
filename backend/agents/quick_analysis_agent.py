@@ -62,72 +62,57 @@ class QuickAnalysisAgent:
         
     def analyze_video(self) -> Dict[str, str]:
         """Analyze the video content using Gemini Vision."""
-        try:
-            print("Uploading video file...")
-            # Upload the video file using the Files API
-            video_file = genai.upload_file(self.video_path)
-            print(f"Completed upload: {video_file.name}")
+        print("Uploading video file...")
+        # Upload the video file using the Files API
+        video_file = genai.upload_file(self.video_path)
+        print(f"Completed upload: {video_file.name}")
 
-            # Wait for video processing
-            while video_file.state.name == "PROCESSING":
-                print('.', end='', flush=True)
-                time.sleep(5)  # Increased sleep time to reduce API calls
-                video_file = genai.get_file(video_file.name)
+        # Wait for video processing
+        while video_file.state.name == "PROCESSING":
+            print('.', end='', flush=True)
+            time.sleep(5)  # Increased sleep time to reduce API calls
+            video_file = genai.get_file(video_file.name)
 
-            if video_file.state.name == "FAILED":
-                raise ValueError(f"Video processing failed: {video_file.error}")
+        if video_file.state.name == "FAILED":
+            raise ValueError(f"Video processing failed: {video_file.error}")
 
-            print('\nVideo processing complete')
+        print('\nVideo processing complete')
 
-            prompt = """
-            You are an expert basketball free throw coach. Analyze this free throw shot video.
-            Focus on:
-            1. Starting position and setup
-            2. Body alignment through the shot
-            3. Shot mechanics (elbow, wrist, shoulder positioning)
-            4. Release point and follow-through
-            5. Overall flow and rhythm
+        prompt = """
+        You are an expert basketball free throw coach. Analyze this free throw shot video.
+        Focus on:
+        1. Starting position and setup
+        2. Body alignment through the shot
+        3. Shot mechanics (elbow, wrist, shoulder positioning)
+        4. Release point and follow-through
+        5. Overall flow and rhythm
 
-            Provide specific feedback on:
-            1. What the player is doing well
-            2. Key areas for improvement
-            3. Specific form corrections needed
-            4. Tips for better consistency
+        Provide specific feedback on:
+        1. What the player is doing well
+        2. Key areas for improvement
+        3. Specific form corrections needed
+        4. Tips for better consistency
 
-            Also provide a detailed breakdown with timestamps of key moments in the shot.
-            """
+        Also provide a detailed breakdown with timestamps of key moments in the shot.
+        """
 
-            # Generate analysis using the video file
-            response = self.model.generate_content([
-                video_file,
-                prompt
-            ])
-            
-            # Clean up the uploaded file
-            try:
-                video_file.delete()
-            except Exception as e:
-                print(f"Warning: Failed to delete uploaded file: {e}")
-            
-            visual_analysis = response.text.split('\n\n')
-            recommendations = [line for line in visual_analysis if line.startswith(('Good:', 'Improve:', 'Tip:'))]
-            reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
-            
-            return {
-                "visual_recommendations": " | ".join(recommendations),
-                "visual_reasoning": " | ".join(reasoning)
-            }
-            
-        except exceptions.PermissionDenied as e:
-            return {
-                "visual_recommendations": f"API key error: {str(e)}",
-                "visual_reasoning": "Please check your Google API key configuration."
-            }
-        except Exception as e:
-            return {
-                "visual_recommendations": f"Error analyzing video: {str(e)}",
-                "visual_reasoning": "Failed to complete video analysis."
-            }
+        # Generate analysis using the video file
+        response = self.model.generate_content([
+            video_file,
+            prompt
+        ])
+        
+        # Clean up the uploaded file
+        video_file.delete()
+        
+        visual_analysis = response.text.split('\n\n')
+        recommendations = [line for line in visual_analysis if line.startswith(('Good:', 'Improve:', 'Tip:'))]
+        reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
+        
+        return {
+            "visual_recommendations": " | ".join(recommendations),
+            "visual_reasoning": " | ".join(reasoning)
+        }
 
     def analyze_form(self, metrics_list: list) -> Dict[str, str]:
         if not metrics_list:
@@ -185,46 +170,52 @@ def initialize_agent():
     analyzer = QuickAnalysisAgent()
     
     def analyze_shot(metrics_data: list) -> Dict[str, str]:
-        try:
-            # Prepare the prompt with metrics data
-            prompt = (
-                "As an expert free throw coach, analyze this player's shooting form metrics:\n\n"
-                f"{json.dumps(metrics_data, indent=2)}\n\n"
-                "Focus on:\n"
-                "1. The most critical aspects that need immediate attention\n"
-                "2. Specific drills to improve these areas\n"
-                "3. Positive aspects of their form to build upon\n"
-                "4. Mental tips for consistent free throw shooting\n\n"
-                "Format your response as a JSON with:\n"
-                "{\n"
-                '    "coach_recommendations": "key points for improvement",\n'
-                '    "coach_reasoning": "detailed analysis and explanation"\n'
-                "}"
-            )
+        # Prepare the prompt with metrics data
+        prompt = (
+            "As an expert free throw coach, analyze this player's shooting form metrics:\n\n"
+            f"{json.dumps(metrics_data, indent=2)}\n\n"
+            "Focus on:\n"
+            "1. The most critical aspects that need immediate attention\n"
+            "2. Specific drills to improve these areas\n"
+            "3. Positive aspects of their form to build upon\n"
+            "4. Mental tips for consistent free throw shooting\n\n"
+            "Provide your response in strict JSON format like this:\n"
+            '{\n'
+            '    "coach_recommendations": "Write your key points for improvement here",\n'
+            '    "coach_reasoning": "Write your detailed analysis and explanation here"\n'
+            '}\n'
+            'Important: Response must be valid JSON only, no other text.'
+        )
 
-            # Get analysis from Gemini
-            response = model.generate_content(prompt)
-            
-            # Combine with video analysis from the analyzer
+        # Get analysis from Gemini
+        response = model.generate_content(prompt)
+        
+        # Print response for debugging
+        print("Raw response from Gemini:")
+        print(response.text)
+        
+        try:
+            # Try to parse as JSON
             metrics_analysis = json.loads(response.text)
-            video_analysis = analyzer.analyze_form(metrics_data)
-            
-            return {
-                "coach_recommendations": (
-                    f"Video Analysis: {video_analysis['coach_recommendations']}\n"
-                    f"Metrics Analysis: {metrics_analysis['coach_recommendations']}"
-                ),
-                "coach_reasoning": (
-                    f"Video Breakdown: {video_analysis['coach_reasoning']}\n"
-                    f"Metrics Breakdown: {metrics_analysis['coach_reasoning']}"
-                )
+        except json.JSONDecodeError:
+            # If JSON parsing fails, create a structured response from the text
+            metrics_analysis = {
+                "coach_recommendations": "Analysis format error",
+                "coach_reasoning": response.text
             }
-            
-        except Exception as e:
-            return {
-                "coach_recommendations": f"Error analyzing shot: {str(e)}",
-                "coach_reasoning": "Failed to complete analysis."
-            }
+        
+        video_analysis = analyzer.analyze_form(metrics_data)
+        
+        return {
+            "coach_recommendations": (
+                f"Video Analysis: {video_analysis['coach_recommendations']}\n"
+                f"Metrics Analysis: {metrics_analysis['coach_recommendations']}"
+            ),
+            "coach_reasoning": (
+                f"Video Breakdown: {video_analysis['coach_reasoning']}\n"
+                f"Metrics Breakdown: {metrics_analysis['coach_reasoning']}"
+            )
+        }
 
     return analyze_shot
 
