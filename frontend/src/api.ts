@@ -2,19 +2,21 @@ import { VideoAnalysis } from './types';
 import { storage } from './firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
+const API_URL = 'http://localhost:8000/api';
+
 export async function uploadVideo(file: File): Promise<VideoAnalysis> {
   try {
     const filename = `${Date.now()}-${file.name}`;
     const videoRef = ref(storage, `videos/${filename}`);
     const uploadResult = await uploadBytes(videoRef, file);
     const downloadURL = await getDownloadURL(videoRef);
-    const response = await fetch('/api/process-video', {
+    const response = await fetch(`${API_URL}/mask_video`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        url: downloadURL,
+        video_url: downloadURL,
       }),
     });
 
