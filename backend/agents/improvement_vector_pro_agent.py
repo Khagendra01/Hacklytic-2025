@@ -3,20 +3,13 @@ import sys
 import time
 from pathlib import Path
 from typing import List, Dict
-# Add both backend and project root to Python path
-backend_dir = str(Path(__file__).parent.parent.parent)
-project_root = str(Path(__file__).parent.parent.parent.parent)
 
-# Add paths if they're not already there
+# Add backend directory to Python path
+backend_dir = str(Path(__file__).parent.parent)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
-# Set PYTHONPATH environment variable
-os.environ['PYTHONPATH'] = f"{project_root}:{backend_dir}"
-
-# Now import the modules
+# Use relative imports
 from shot_detector import ShotDetector
 from preprocessing.noise_masking import NoiseReducer
 
@@ -151,147 +144,190 @@ class ImprovementVectorProAgent:
                 'message': str(e)
             }
 
+async def process_video_with_timeout(noise_reducer, input_video, unique_output, timeout=30):
+    """Process video"""
+    try:
+        await noise_reducer.process_video(input_video, unique_output)
+    except Exception as e:
+        print(f"Video processing failed for {input_video}: {str(e)}")
+        raise
 
-def fetch_metadata_for_video(input_video, output_video):
-    # Create unique output path for each video using timestamp
-    timestamp = int(time.time() * 1000)
-    unique_output = output_video.replace('.mp4', f'_{timestamp}.mp4')
-    
-    # Debug prints
-    print(f"Looking for input video at: {input_video}")
-    print(f"Output will be saved to: {unique_output}")
+def fetch_metadata_for_video(input_video, output_dir):
+    """Process a single video and return its metrics"""
+    try:
+        # Create unique output filename for each video
+        timestamp = int(time.time() * 1000)
+        video_name = Path(input_video).stem
+        unique_output = Path('noisy_images/masked_shot.mp4')  # Convert to Path object
+        
+        print(f"\nProcessing video: {input_video}")
+        print(f"Output will be saved to: {unique_output}")
+        
+        if not os.path.exists(input_video):
+            raise FileNotFoundError(f"Input video not found: {input_video}")
+        
+        try:
+            # Process video with noise reduction
+            noise_reducer = NoiseReducer()
+            asyncio.run(noise_reducer.process_video(str(input_video), str(unique_output)))
+            print(f"Created masked video at: {unique_output}")
+            
+            # Initialize detector and process video
+            detector = ShotDetector(str(unique_output))  # Pass video path during initialization
+            
+            # Get shot metrics
+            shot_metrics = detector.shot_metrics
+            print("Metrics with mask:", shot_metrics)
+            
+            # If no metrics detected, try without mask
+            if not shot_metrics:
+                print("No metrics detected with mask, trying original video...")
+                detector = ShotDetector(str(input_video))  # Reinitialize with original video
+                shot_metrics = detector.shot_metrics
+                print("Metrics without mask:", shot_metrics)
+            
+            # Get the first frame's metrics if available
+            if shot_metrics and len(shot_metrics) > 0:
+                metrics = shot_metrics[0]
+            else:
+                print(f"No metrics detected for video: {input_video}")
+                metrics = {
+                    'elbow_angle': 0.0,
+                    'wrist_angle': 0.0,
+                    'shoulder_angle': 0.0,
+                    'knee_angle': 0.0,
+                    'shot_trajectory': 0.0,
+                    'release_height_ratio': 0.0
+                }
+            
+            return metrics
+            
+        finally:
+            # Cleanup temporary masked video
+            try:
+                if unique_output.exists():  # Now works because unique_output is a Path object
+                    unique_output.unlink()
+                    print(f"Cleaned up temporary file: {unique_output}")
+            except Exception as e:
+                print(f"Failed to cleanup temp file: {str(e)}")
+                
+    except Exception as e:
+        print(f"Error processing video {input_video}: {str(e)}")
+        return {
+            'elbow_angle': 0.0,
+            'wrist_angle': 0.0,
+            'shoulder_angle': 0.0,
+            'knee_angle': 0.0,
+            'shot_trajectory': 0.0,
+            'release_height_ratio': 0.0
+        }
+
+def generate_metadata_from_videos(video_list):
+    """Process a list of videos and generate metadata for each"""
+    metadata_list = []
+    output_dir = Path("noisy_images")
     
     try:
         # Create output directory if it doesn't exist
-        os.makedirs(os.path.dirname(unique_output), exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Check if input file exists
-        if not os.path.exists(input_video):
-            print(f"Error: Input video file not found at: {input_video}")
-            raise FileNotFoundError(f"Input video not found: {input_video}")
-        
-        noise_reducer = NoiseReducer()
-        
-        # Run noise reduction asynchronously and wait for it to complete
-        asyncio.run(noise_reducer.process_video(input_video, unique_output))
-        
-        print("MASKED SHOT CREATED")
-        
-        # Now that noise reduction is complete, run shot detection
-        detector = ShotDetector()  
-        shot_metrics = detector.shot_metrics
-        print("Tried with mask ", shot_metrics)
-        
-        # Call without the mask if needed
-        if not shot_metrics:  
-            detector = ShotDetector(unmasked_video_path=input_video)
-            shot_metrics = detector.shot_metrics
-            print('SHOT METRICS FROM DETECTOR without mask', detector.shot_metrics)
-
-        # Cleanup temporary file
-        if os.path.exists(unique_output):
-            os.remove(unique_output)
-
-        # Return the first metrics dictionary from the list
-        if shot_metrics and len(shot_metrics) > 0:
-            return shot_metrics[0]  # Return first element since it's a list
-        
-    except Exception as e:
-        print(f"Error in fetch_metadata_for_video: {str(e)}")
-        raise e
+        for video_path in video_list:
+            try:
+                # Process each video
+                metrics = fetch_metadata_for_video(video_path, output_dir)
+                metadata = {
+                    'video_url': video_path,
+                    **{k: float(metrics.get(k, 0.0)) for k in [
+                        'elbow_angle', 'wrist_angle', 'shoulder_angle',
+                        'knee_angle', 'shot_trajectory', 'release_height_ratio'
+                    ]}
+                }
+                
+                metadata_list.append(metadata)
+                print(f"Successfully processed: {video_path}")
+                
+            except Exception as e:
+                print(f"Failed to process video {video_path}: {str(e)}")
+                # Add default metrics for failed video
+                metadata_list.append({
+                    'video_url': video_path,
+                    'elbow_angle': 0.0,
+                    'wrist_angle': 0.0,
+                    'shoulder_angle': 0.0,
+                    'knee_angle': 0.0,
+                    'shot_trajectory': 0.0,
+                    'release_height_ratio': 0.0
+                })
+                
     finally:
-        # Ensure cleanup happens even if there's an error
-        if os.path.exists(unique_output):
-            os.remove(unique_output)
-    
-    # Return empty metrics if nothing was detected
-    return {
-        'elbow_angle': 0.0,
-        'wrist_angle': 0.0,
-        'shoulder_angle': 0.0,
-        'knee_angle': 0.0,
-        'shot_trajectory': 0.0,
-        'release_height_ratio': 0.0
-    }
-
-def generate_metadata_from_videos(list_videos_urls):
-    """Given a list of video urls generate a list of metadata for each object"""
-    metadata_list = []
-    
-    for video_url in list_videos_urls:
+        # Cleanup temp directory
         try:
-            print(f"\nProcessing video: {video_url}")
-            metrics = fetch_metadata_for_video(
-                video_url, 
-                'backend/noisy_images/temp_masked_shot.mp4'
-            )
-            
-            print("GENERATED METRIC FOR VIDEO ", video_url, ":", metrics)
-            
-            # Create metadata object with relevant metrics
-            metadata = {
-                'video_url': video_url,
-                'elbow_angle': float(metrics['elbow_angle']),
-                'wrist_angle': float(metrics['wrist_angle']),
-                'shoulder_angle': float(metrics['shoulder_angle']),
-                'knee_angle': float(metrics['knee_angle']),
-                'shot_trajectory': float(metrics['shot_trajectory']),
-                'release_height_ratio': float(metrics['release_height_ratio'])
-            }
-            
-            metadata_list.append(metadata)
-            print(f"Processed {video_url} successfully")
-            
-            # Add small delay between videos
-            time.sleep(1)
-            
+            if output_dir.exists():
+                for temp_file in output_dir.glob("masked_*.mp4"):
+                    temp_file.unlink()
+                output_dir.rmdir()
+                print("Cleaned up temporary directory")
         except Exception as e:
-            print(f"Error processing video {video_url}: {str(e)}")
-            # Add empty metrics for failed video
-            metadata_list.append({
-                'video_url': video_url,
-                'elbow_angle': 0.0,
-                'wrist_angle': 0.0,
-                'shoulder_angle': 0.0,
-                'knee_angle': 0.0,
-                'shot_trajectory': 0.0,
-                'release_height_ratio': 0.0
-            })
-            
+            print(f"Failed to cleanup temp directory: {str(e)}")
+    
     return metadata_list
 
 
 def get_pro_improvement_vector(test_videos: List) -> Dict:
-    # Generate metadata
-    metadata_list = generate_metadata_from_videos(test_videos)
-    
-    # Print results
-    print("\nGenerated Metadata:")
-    for metadata in metadata_list:
-        print(f"\nVideo: {metadata['video_url']}")
-        for key, value in metadata.items():
-            if key != 'video_url':
-                print(f"{key}: {value:.1f}°")
-    
-    # Use metadata for improvement vector analysis
-    agent = ImprovementVectorProAgent()
-    result = agent.analyze_sequence(metadata_list)
-    
-    return result
+    try:
+        # Generate metadata with timeout
+        metadata_list = generate_metadata_from_videos(test_videos)
+        
+        print("\nGenerated Metadata:")
+        for metadata in metadata_list:
+            print(f"\nVideo: {metadata['video_url']}")
+            for key, value in metadata.items():
+                if key != 'video_url':
+                    print(f"{key}: {value:.1f}°")
+        
+        # Use metadata for improvement vector analysis
+        agent = ImprovementVectorProAgent()
+        result = agent.analyze_sequence(metadata_list)
+        
+        return result
+    except Exception as e:
+        print(f"Error in get_pro_improvement_vector: {str(e)}")
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
 if __name__ == "__main__":
-    test_videos = [
-        "backend/noisy_images/clip_001.mp4",
-        "backend/noisy_images/clip_062.mp4",
-        "backend/noisy_images/2.mp4"
-    ]
-    result = get_pro_improvement_vector(test_videos)
-    if result['status'] == 'success':
-        print("\nImprovement Analysis:")
-        print(f"Score: {result['current_score']:.2f}")
-        print("\nImprovement Vector:")
-        for metric, value in result['improvement_vector'].items():
-            print(f"{metric}: {value}")
-    else:
-        print(f"\nError: {result['message']}")
+    try:
+        # Use absolute paths relative to the backend directory
+        test_videos = [
+            "noisy_images/clip_001.mp4",
+            "noisy_images/clip_062.mp4",
+            "noisy_images/clip_082.mp4"
+        ]
+        
+        print("Starting analysis...")
+        result = get_pro_improvement_vector(test_videos)
+        
+        if result['status'] == 'success':
+            print("\nImprovement Analysis:")
+            print(f"Score: {result['current_score']:.2f}")
+            print("\nImprovement Vector:")
+            for metric, value in result['improvement_vector'].items():
+                print(f"{metric}: {value}")
+        else:
+            print(f"\nError: {result['message']}")
+            
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user")
+        # Ensure cleanup happens even on keyboard interrupt
+        if 'output_dir' in locals():
+            try:
+                for temp_file in Path("temp_processed_videos").glob("masked_*.mp4"):
+                    temp_file.unlink()
+                Path("temp_processed_videos").rmdir()
+            except Exception as e:
+                print(f"Cleanup failed: {str(e)}")
+    except Exception as e:
+        print(f"\nUnexpected error: {str(e)}")
 
