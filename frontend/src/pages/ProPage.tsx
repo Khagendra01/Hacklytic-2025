@@ -8,11 +8,32 @@ interface VideoUpload {
   timeframe: string;
 }
 
-interface AnalysisResult {
-  img_url: string;
-  rank: string;
-
+interface Assessment {
+  score: number;  // Score between 40-100
+  tier: 'S' | 'A' | 'B' | 'C';  // Defined tiers
+  technical_analysis: string;  // Detailed analysis of form and metrics
+  visual_analysis?: string;  // Optional: Only present if video_path is provided
 }
+
+interface ImprovementAnalysis {
+  score_improvement: number;  // Points improved
+  key_improvements: string[];  // List of metrics that improved
+  areas_for_development: string[];  // List of metrics needing work
+  summary: string;  // Text summary of improvements
+}
+
+interface PotentialAssessment {
+  score: number;  // Potential ceiling score
+  justification: string;  // Explanation of potential calculation
+}
+
+interface AnalysisResult {
+  initial_assessment: Assessment;
+  follow_up_assessment: Assessment;
+  improvement_analysis: ImprovementAnalysis;
+  potential_assessment: PotentialAssessment;
+}
+
 
 interface VideoData {
   url: string;
@@ -129,25 +150,78 @@ export function ProPage() {
         {/* Analysis Result Card */}
         {analysisResult && (
           <div className="mt-8 bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="aspect-w-16 aspect-h-9">
-              <img 
-                src={analysisResult.img_url} 
-                alt="Analysis Result"
-                className="w-full h-full object-cover"
-              />
-            </div>
             <div className="p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold">Our Rookie</h3>
-                <span className="text-xl font-semibold text-blue-600">
-                  Rank: {analysisResult.rank}
-                </span>
+              <div className="space-y-6">
+                {/* Initial Assessment */}
+                <div>
+                  <h3 className="text-2xl font-bold mb-4">Initial Assessment</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="font-semibold">Score: {analysisResult.initial_assessment.score}</p>
+                      <p className="font-semibold">Tier: {analysisResult.initial_assessment.tier}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-700">{analysisResult.initial_assessment.technical_analysis}</p>
+                      {analysisResult.initial_assessment.visual_analysis && (
+                        <p className="text-gray-700 mt-2">{analysisResult.initial_assessment.visual_analysis}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Follow-up Assessment */}
+                <div>
+                  <h3 className="text-2xl font-bold mb-4">Follow-up Assessment</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="font-semibold">Score: {analysisResult.follow_up_assessment.score}</p>
+                      <p className="font-semibold">Tier: {analysisResult.follow_up_assessment.tier}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-700">{analysisResult.follow_up_assessment.technical_analysis}</p>
+                      {analysisResult.follow_up_assessment.visual_analysis && (
+                        <p className="text-gray-700 mt-2">{analysisResult.follow_up_assessment.visual_analysis}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Improvement Analysis */}
+                <div>
+                  <h3 className="text-2xl font-bold mb-4">Improvement Analysis</h3>
+                  <p className="font-semibold text-green-600">Score Improvement: {analysisResult.improvement_analysis.score_improvement} points</p>
+                  <div className="mt-4">
+                    <h4 className="font-semibold">Key Improvements:</h4>
+                    <ul className="list-disc pl-5">
+                      {analysisResult.improvement_analysis.key_improvements.map((improvement, index) => (
+                        <li key={index}>{improvement}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="mt-4">
+                    <h4 className="font-semibold">Areas for Development:</h4>
+                    <ul className="list-disc pl-5">
+                      {analysisResult.improvement_analysis.areas_for_development.map((area, index) => (
+                        <li key={index}>{area}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <p className="mt-4 text-gray-700">{analysisResult.improvement_analysis.summary}</p>
+                </div>
+
+                {/* Potential Assessment */}
+                <div>
+                  <h3 className="text-2xl font-bold mb-4">Potential Assessment</h3>
+                  <p className="font-semibold">Potential Score: {analysisResult.potential_assessment.score}</p>
+                  <p className="text-gray-700 mt-2">{analysisResult.potential_assessment.justification}</p>
+                </div>
               </div>
+
               <button 
-                className="mt-4 w-full bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-900 transition-colors"
+                className="mt-6 w-full bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-900 transition-colors"
                 onClick={() => setShowDetails(true)}
               >
-                More Details
+                View Detailed Analysis
               </button>
             </div>
           </div>
