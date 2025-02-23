@@ -48,3 +48,55 @@ Thumbs.db
 coverage.xml
 nosetests.xml
 test_coverage/
+
+# Large model files
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.pkl
+*.onnx
+*.tflite
+*.pb
+yolov8*
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.mkv
+
+# Image directories
+backend/noisy_images/
+**/noisy_images/
+**/images/
+**/videos/
+
+# Cache and temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Large data files
+*.csv
+*.json
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
