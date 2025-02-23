@@ -82,9 +82,9 @@ async def mask_video(request: VideoRequest):
 
         
         # Clean up temporary files
-        os.remove(input_video_path)
-        os.remove(output_video_path)
-        os.remove(processed_video_path)
+        # os.remove(input_video_path)
+        # os.remove(output_video_path)
+        # os.remove(processed_video_path)
 
         # # Upload shot metrics to Firebase
         # firebase_shot_metrics_path = f"shot_metrics/{os.path.basename(output_video_path)}"
