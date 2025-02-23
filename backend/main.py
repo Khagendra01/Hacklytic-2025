@@ -8,6 +8,7 @@ import uuid
 from preprocessing.noise_masking import NoiseReducer, MaskingConfig
 from firebase.firebase_storage import FirebaseStorageManager
 import asyncio
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -28,6 +29,10 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
+# Add this class before the endpoint
+class VideoRequest(BaseModel):
+    video_url: str
+
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
@@ -38,11 +43,14 @@ async def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
 @app.post("/api/mask_video")
-async def mask_video(video_url: str):
+async def mask_video(request: VideoRequest):
     try:
         # Create temporary directory if it doesn't exist
         temp_dir = "temp_videos"
         os.makedirs(temp_dir, exist_ok=True)
+        
+        # Use request.video_url instead of video_url parameter
+        video_url = request.video_url
         
         # Generate unique filenames for input and output videos
         input_video_path = os.path.join(temp_dir, f"input_{uuid.uuid4()}.mp4")
