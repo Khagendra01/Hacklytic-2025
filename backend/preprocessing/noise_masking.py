@@ -27,7 +27,7 @@ class NoiseReducer:
         self.config = config or MaskingConfig()
         
         # Initialize YOLO model for ball and hoop detection
-        self.model = YOLO("backend/runs/detect/train/weights/best.pt")
+        self.model = YOLO("runs/detect/train/weights/best.pt")
         
         # Initialize MediaPipe for pose detection
         self.mp_pose = mp.solutions.pose
