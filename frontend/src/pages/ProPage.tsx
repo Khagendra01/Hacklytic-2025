@@ -63,25 +63,9 @@ export function ProPage() {
   ]);
   const [isComputing, setIsComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>();
-  const [showDetails, setShowDetails] = useState(false);
-  const [detailedData] = useState<DetailedAnalysis>({
-    larry: {
-      cards: {
-        c1: { img_url: "https://example.com/1", rank: "A", url: "video_url_1" },
-        c2: { img_url: "https://example.com/2", rank: "B", url: "video_url_1" },
-        c3: { img_url: "https://example.com/3", rank: "C", url: "video_url_1" }
-      }
-    },
-    rookie: {
-      cards: {
-        c1: { img_url: "https://example.com/4", rank: "B", url: "video_url_1" },
-        c2: { img_url: "https://example.com/5", rank: "C", url: "video_url_1" }
-      }
-    }
-  });
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>()
   
-  const timeOptions = ['6 months', '1 year'];
+  const timeOptions = ['6 months', '1 year', '2 years', '3 years', '4 years', '5 years'];
 
   const handleFileChange = (index: number) => (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -147,6 +131,115 @@ export function ProPage() {
       <div className="max-w-4xl mx-auto space-y-8">
         <h2 className="text-3xl font-bold text-center">Pro Analysis</h2>
         
+        {/* Upload Section */}
+        <div className="space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-center">
+              {error}
+            </div>
+          )}
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {uploads.map((upload, index) => (
+              <div key={index} className="space-y-4">
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                  <h3 className="font-semibold text-lg mb-4">
+                    {index === 0 ? 'Initial Video' : 'Follow-up Video'}
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Upload Video
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="video/*"
+                          onChange={handleFileChange(index)}
+                          id={`video-upload-${index}`}
+                        />
+                        <label
+                          htmlFor={`video-upload-${index}`}
+                          className={`
+                            flex items-center justify-center w-full px-4 py-3 rounded-lg
+                            border-2 border-dashed transition-colors cursor-pointer
+                            ${upload.file 
+                              ? 'border-green-300 bg-green-50 hover:bg-green-100' 
+                              : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            }
+                          `}
+                        >
+                          <div className="text-center">
+                            {upload.file ? (
+                              <div className="flex items-center space-x-2">
+                                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span className="text-sm text-gray-600">{upload.file.name}</span>
+                              </div>
+                            ) : (
+                              <>
+                                <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                <span className="mt-2 block text-sm text-gray-600">
+                                  Click to upload or drag and drop
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Time Period
+                      </label>
+                      <select 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={upload.timeframe}
+                        onChange={handleTimeframeChange(index)}
+                      >
+                        {timeOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+                
+          <button
+            onClick={handleCompute}
+            disabled={isComputing}
+            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed font-medium text-sm flex items-center justify-center space-x-2"
+          >
+            {isComputing ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <span>Analyze Videos</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Analysis Result Card */}
         {analysisResult && (
           <div className="mt-8 bg-white rounded-xl shadow-lg overflow-hidden">
@@ -216,127 +309,10 @@ export function ProPage() {
                   <p className="text-gray-700 mt-2">{analysisResult.potential_assessment.justification}</p>
                 </div>
               </div>
-
-              <button 
-                className="mt-6 w-full bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-900 transition-colors"
-                onClick={() => setShowDetails(true)}
-              >
-                View Detailed Analysis
-              </button>
             </div>
           </div>
         )}
 
-        {showDetails && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between mb-6">
-                <h2 className="text-2xl font-bold">Detailed Analysis</h2>
-                <button 
-                  onClick={() => setShowDetails(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  Close
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-8">
-                {/* Larry's Section */}
-                <div className="space-y-4">
-                  <h3 className="text-xl font-semibold">Larry</h3>
-                  <div className="space-y-4">
-
-                    {Object.entries(detailedData.larry.cards).map(([key, card]) => (
-                      <div key={key} className="border rounded-lg p-4">
-                                            <div className="border rounded-lg p-4">
-                      <video 
-                        controls 
-                        className="w-full rounded-lg"
-                        src={card.url}
-                      />
-                    </div>
-                    <div className="flex items-center gap-4 mt-2">
-                        <img 
-                          src={card.img_url} 
-                          alt={`Analysis ${key}`}
-                          className="w-24 h-24 object-cover rounded-lg"
-                        />
-                        <span className="font-semibold">Rank: {card.rank}</span>
-                      </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Rookie's Section */}
-                <div className="space-y-4">
-                  <h3 className="text-xl font-semibold">Rookie</h3>
-                  <div className="space-y-4">
-
-                    {Object.entries(detailedData.rookie.cards).map(([key, card]) => (
-                      <div key={key} className="border rounded-lg p-4">
-                                            <div className="border rounded-lg p-4">
-                      <video 
-                        controls 
-                        className="w-full rounded-lg"
-                        src={card.url}
-                      />
-                    </div>
-                    <div className="flex items-center gap-4 mt-2">
-                          <img 
-                            src={card.img_url} 
-                            alt={`Analysis ${key}`}
-                            className="w-24 h-24 object-cover rounded-lg"
-                          />
-                          <span className="font-semibold">Rank: {card.rank}</span>
-                        </div>
-
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-6">
-          {error && (
-            <div className="text-red-500 text-center">{error}</div>
-          )}
-
-          <div className="flex gap-4">
-            {uploads.map((upload, index) => (
-              <div key={index} className="flex-1">
-                <input
-                  type="file"
-                  className="w-full p-2 border rounded-lg"
-                  accept="video/*"
-                  onChange={handleFileChange(index)}
-                />
-                <select 
-                  className="mt-2 w-full p-2 border rounded-lg"
-                  value={upload.timeframe}
-                  onChange={handleTimeframeChange(index)}
-                >
-                  {timeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-                  
-          <button
-            onClick={handleCompute}
-            disabled={isComputing}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-          >
-            {isComputing ? 'Computing...' : 'Compute Analysis'}
-          </button>
-        </div>
       </div>
     </main>
   );
