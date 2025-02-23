@@ -42,7 +42,7 @@ function App() {
             <div className="flex items-center gap-3">
               <Activity className="w-8 h-8 text-blue-600" />
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 text-transparent bg-clip-text">
-                CourtVision AI
+                Scout It
               </h1>
             </div>
             {error && (
