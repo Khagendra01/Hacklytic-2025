@@ -1,3 +1,5 @@
+service_account_key.json
+
 # Python/Django
 *.pyc
 *.pyo
@@ -47,4 +49,4 @@ Thumbs.db
 .coverage
 coverage.xml
 nosetests.xml
-test_coverage/
+test_coverage/backend/firebase/service_account_key.json
