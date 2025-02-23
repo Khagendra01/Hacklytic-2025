@@ -23,28 +23,51 @@ from utils import (
 
 
 class ShotDetector:
-    def __init__(self, unmasked_video_path = None):
+    def __init__(self, unmasked_video_path=None, output_file_dir=None):
         # Load the YOLO model created from main.py - change text to your relative path
         self.model = YOLO("runs/detect/train/weights/best.pt")
         self.class_names = ['Basketball', 'Basketball Hoop']
-        # Uncomment line below to use webcam (I streamed to my iPhone using Iriun Webcam)
-        # self.cap = cv2.VideoCapture(0)
-        self.unmasked_video_path = unmasked_video_path if unmasked_video_path else 'backend/noisy_images/masked_shot.mp4'
-
-        # Use video - replace text with your video path
         
+        # Set video path
+        self.unmasked_video_path = unmasked_video_path if unmasked_video_path else 'backend/noisy_images/masked_shot.mp4'
         self.cap = cv2.VideoCapture(self.unmasked_video_path)
-        # self.cap = cv2.VideoCapture('shoot-with-great-form (online-video-cutter.com).mp4')
-        # self.cap = cv2.VideoCapture('3fe1d32b-813c-4034-8307-aaacacf1c87c.mp4')
-        # self.cap = cv2.VideoCapture('shoot-with-great-form (online-video-cutter.com)-2.mp4')
+        if not self.cap.isOpened():
+            raise ValueError(f"Could not open input video: {self.unmasked_video_path}")
 
+        # Get video properties
+        self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
 
+        # Setup output video
+        self.output_path = output_file_dir if output_file_dir else 'temp_videos/processed_new_file.mp4'
+        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
+        
+        # Create video writer with avc1 codec
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')
+        self.out = cv2.VideoWriter(
+            self.output_path,
+            fourcc,
+            self.fps,
+            (self.frame_width, self.frame_height),
+            isColor=True
+        )
+
+        if not self.out.isOpened():
+            # Fallback to mp4v codec if avc1 fails
+            self.out = cv2.VideoWriter(
+                self.output_path,
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                self.fps,
+                (self.frame_width, self.frame_height),
+                isColor=True
+            )
+
+        # Initialize other variables
         self.ball_pos = []  # array of tuples ((x_pos, y_pos), frame count, width, height, conf)
         self.hoop_pos = []  # array of tuples ((x_pos, y_pos), frame count, width, height, conf)
-
         self.frame_count = 0
         self.frame = None
-
         self.makes = 0
         self.attempts = 0
 
@@ -69,24 +92,7 @@ class ShotDetector:
         # Add new instance variables for storing angles
         self.shot_metrics = []  # Will store metrics for each shot
 
-        # Add video writer setup
-        self.output_path = f'processed_videos/{os.path.basename(self.unmasked_video_path)}'  # Changed path
-        frame = self.cap.read()[1]  # Read first frame to get dimensions
-        self.frame_width = int(frame.shape[1])
-        self.frame_height = int(frame.shape[0])
-        
-        # Create output directory if it doesn't exist
-        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
-        
-        self.out = cv2.VideoWriter(
-            self.output_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
-            30,  # FPS
-            (self.frame_width, self.frame_height)
-        )
-
         # Add video FPS tracking
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
         self.shot_timestamps = []  # Will store timestamps of shots
 
         try:
@@ -161,6 +167,25 @@ class ShotDetector:
             if hasattr(self, 'out'):
                 self.out.release()
             cv2.destroyAllWindows()
+            
+            # Convert to more compatible format using FFmpeg
+            try:
+                temp_path = self.output_path
+                final_path = temp_path.replace('.mp4', '_final.mp4')
+                subprocess.run([
+                    'ffmpeg', '-i', temp_path,
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    final_path,
+                    '-y'  # Overwrite if exists
+                ], check=True)
+                # Replace original with converted file
+                os.replace(final_path, temp_path)
+            except Exception as e:
+                print(f"Warning: Could not convert video format: {e}")
 
     def run(self):
         release_angle = None
@@ -542,40 +567,6 @@ class ShotDetector:
         print(f"- Release height ratio: {shot_metric['release_height_ratio']}")
         return shot_metric
 
-def input_handler(input_video, output_video):
-        # Debug prints
-    print(f"Looking for input video at: {input_video}")
-    print(f"Output will be saved to: {output_video}")
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_video), exist_ok=True)
-    
-    # Check if input file exists
-    if not os.path.exists(input_video):
-        print(f"Error: Input video file not found at: {input_video}")
-        raise FileNotFoundError(f"Input video not found: {input_video}")
-    
-    noise_reducer = NoiseReducer()
-    
-    # Run noise reduction asynchronously and wait for it to complete
-    asyncio.run(noise_reducer.process_video(input_video, output_video))
-    
-    print("MASKED SHOT CREATED")
-    
-    # Now that noise reduction is complete, run shot detection
-    detector = ShotDetector()  
-    shot_metrics = detector.shot_metrics
-    print("Tried with mask ", shot_metrics)
-    time.sleep(1)
-    #Call without the mask
-    if not shot_metrics:  
-        detector = ShotDetector(unmasked_video_path=input_video)
-        shot_metrics = detector.shot_metrics
-        print('SHOT METRICS FROM DETECTOR without mask', detector.shot_metrics)
-
-    #Analysed file saved to backend/noisy_images/analysis.mp4
-    return shot_metrics
-
 
 if __name__ == "__main__":
 
@@ -585,7 +576,7 @@ if __name__ == "__main__":
     # print(f"Project root: {project_root}")  # Debug print
     # Construct full paths using project root
     input_video = "noisy_images/clip_001.mp4"
-    output_video = "backend/noisy_images/masked_shot.mp4"
+    output_video = "temp_dir/masked_video_3.mp4"
     
     # Debug prints
     print(f"Looking for input video at: {input_video}")
@@ -613,6 +604,6 @@ if __name__ == "__main__":
     time.sleep(1)
     #Call without the mask
     if not shot_metrics:  
-        detector = ShotDetector(unmasked_video_path=input_video)
+        detector = ShotDetector(unmasked_video_path=output_video)
         shot_metrics = detector.shot_metrics
         print('SHOT METRICS FROM DETECTOR without mask', detector.shot_metrics)

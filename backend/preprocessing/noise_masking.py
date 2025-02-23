@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+import subprocess
 
 import cv2
 import mediapipe as mp
@@ -177,58 +178,69 @@ class NoiseReducer:
             cv2.fillPoly(mask, [hull], (255, 255, 255))
 
     async def process_video(self, input_path, output_path):
-        """Process video with frame skipping and progress tracking"""
+        """Process video and save masked version"""
         try:
+            # Open input video
             cap = cv2.VideoCapture(input_path)
             if not cap.isOpened():
-                raise ValueError("Could not open input video")
+                raise ValueError(f"Could not open input video: {input_path}")
 
             # Get video properties
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = int(cap.get(cv2.CAP_PROP_FPS))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            # Create output directory if it doesn't exist
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-            frame_count = 0
-            
-            while cap.isOpened():
+            # Create video writer with avc1 codec
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # Changed from mp4v to avc1
+            writer = cv2.VideoWriter(
+                output_path,
+                fourcc,
+                fps,
+                (width, height),
+                isColor=True
+            )
+
+            if not writer.isOpened():
+                # Fallback to mp4v codec if avc1 fails
+                writer = cv2.VideoWriter(
+                    output_path,
+                    cv2.VideoWriter_fourcc(*'mp4v'),
+                    fps,
+                    (width, height),
+                    isColor=True
+                )
+
+            while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
-                frame_count += 1
-                
-                # Process every nth frame
-                if frame_count % self.config.process_every_n_frames != 0:
-                    out.write(self.last_valid_mask)
-                    continue
 
-                self.logger.info(f"Processing frame {frame_count}/{total_frames}")
-                
+                # Process frame
                 results = self.model(frame)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pose_results = self.pose.process(frame_rgb)
                 
+                # Create and apply mask
                 mask = self.create_mask(frame, results, pose_results)
                 masked_frame = cv2.bitwise_and(frame, mask)
-                masked_frame = cv2.GaussianBlur(masked_frame, (3, 3), 0)
                 
-                out.write(masked_frame)
+                # Write frame
+                writer.write(masked_frame)
 
-                # Add optional delay between frames
-                if self.config.frame_delay > 0:
-                    await asyncio.sleep(self.config.frame_delay)
-
-            self.logger.info("Video processing completed")
+            # Clean up
+            cap.release()
+            writer.release()
+            cv2.destroyAllWindows()
 
         except Exception as e:
-            self.logger.error(f"Error processing video: {str(e)}")
+            print(f"Error processing video: {str(e)}")
+            if 'cap' in locals():
+                cap.release()
+            if 'writer' in locals():
+                writer.release()
+            cv2.destroyAllWindows()
             raise
 
-        finally:
-            cap.release()
-            out.release()
-            cv2.destroyAllWindows()
