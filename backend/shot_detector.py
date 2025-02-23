@@ -4,6 +4,7 @@ import asyncio
 import math
 import os
 import subprocess
+import time
 
 import cv2
 import cvzone
@@ -22,16 +23,17 @@ from utils import (
 
 
 class ShotDetector:
-    def __init__(self):
+    def __init__(self, unmasked_video_path = None):
         # Load the YOLO model created from main.py - change text to your relative path
         self.model = YOLO("backend/runs/detect/train/weights/best.pt")
         self.class_names = ['Basketball', 'Basketball Hoop']
-
         # Uncomment line below to use webcam (I streamed to my iPhone using Iriun Webcam)
         # self.cap = cv2.VideoCapture(0)
+        self.unmasked_video_path = unmasked_video_path if unmasked_video_path else 'backend/noisy_images/masked_shot.mp4'
 
         # Use video - replace text with your video path
-        self.cap = cv2.VideoCapture('backend/noisy_images/masked_shot.mp4')
+        
+        self.cap = cv2.VideoCapture(self.unmasked_video_path)
         # self.cap = cv2.VideoCapture('shoot-with-great-form (online-video-cutter.com).mp4')
         # self.cap = cv2.VideoCapture('3fe1d32b-813c-4034-8307-aaacacf1c87c.mp4')
         # self.cap = cv2.VideoCapture('shoot-with-great-form (online-video-cutter.com)-2.mp4')
@@ -540,17 +542,49 @@ class ShotDetector:
         print(f"- Release height ratio: {shot_metric['release_height_ratio']}")
         return shot_metric
 
-if __name__ == "__main__":
-    import asyncio
-    import os
+def input_handler(input_video, output_video):
+        # Debug prints
+    print(f"Looking for input video at: {input_video}")
+    print(f"Output will be saved to: {output_video}")
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_video), exist_ok=True)
+    
+    # Check if input file exists
+    if not os.path.exists(input_video):
+        print(f"Error: Input video file not found at: {input_video}")
+        raise FileNotFoundError(f"Input video not found: {input_video}")
+    
+    noise_reducer = NoiseReducer()
+    
+    # Run noise reduction asynchronously and wait for it to complete
+    asyncio.run(noise_reducer.process_video(input_video, output_video))
+    
+    print("MASKED SHOT CREATED")
+    
+    # Now that noise reduction is complete, run shot detection
+    detector = ShotDetector()  
+    shot_metrics = detector.shot_metrics
+    print("Tried with mask ", shot_metrics)
+    time.sleep(1)
+    #Call without the mask
+    if not shot_metrics:  
+        detector = ShotDetector(unmasked_video_path=input_video)
+        shot_metrics = detector.shot_metrics
+        print('SHOT METRICS FROM DETECTOR without mask', detector.shot_metrics)
 
-    from preprocessing.noise_masking import NoiseReducer
+    #Analysed file saved to backend/noisy_images/analysis.mp4
+    return shot_metrics
+
+
+if __name__ == "__main__":
+
 
     # Get absolute path to ShotFormCorrector directory
     # project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     # print(f"Project root: {project_root}")  # Debug print
     # Construct full paths using project root
-    input_video = "backend/noisy_images/clip_001.mp4"
+    input_video = "backend/noisy_images/steph3.mp4"
     output_video = "backend/noisy_images/masked_shot.mp4"
     
     # Debug prints
@@ -574,4 +608,11 @@ if __name__ == "__main__":
     
     # Now that noise reduction is complete, run shot detection
     detector = ShotDetector()  
-    print('SHOT METRICS FROM DETECTOR', detector.shot_metrics)
+    shot_metrics = detector.shot_metrics
+    print("Tried with mask ", shot_metrics)
+    time.sleep(1)
+    #Call without the mask
+    if not shot_metrics:  
+        detector = ShotDetector(unmasked_video_path=input_video)
+        shot_metrics = detector.shot_metrics
+        print('SHOT METRICS FROM DETECTOR without mask', detector.shot_metrics)

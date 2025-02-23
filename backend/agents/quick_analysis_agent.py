@@ -62,57 +62,74 @@ class QuickAnalysisAgent:
         
     def analyze_video(self) -> Dict[str, str]:
         """Analyze the video content using Gemini Vision."""
-        print("Uploading video file...")
-        # Upload the video file using the Files API
-        video_file = genai.upload_file(self.video_path)
-        print(f"Completed upload: {video_file.name}")
+        try:
+            if not os.path.exists(self.video_path):
+                return {
+                    "visual_recommendations": "Video file not found",
+                    "visual_reasoning": "Unable to analyze video: File not found"
+                }
 
-        # Wait for video processing
-        while video_file.state.name == "PROCESSING":
-            print('.', end='', flush=True)
-            time.sleep(5)  # Increased sleep time to reduce API calls
-            video_file = genai.get_file(video_file.name)
+            print("Uploading video file...")
+            # Upload the video file using the Files API
+            with open(self.video_path, 'rb') as f:
+                video_file = genai.upload_file(self.video_path, file=f)
+            print(f"Completed upload: {video_file.name}")
 
-        if video_file.state.name == "FAILED":
-            raise ValueError(f"Video processing failed: {video_file.error}")
+            # Wait for video processing
+            while video_file.state.name == "PROCESSING":
+                print('.', end='', flush=True)
+                time.sleep(5)
+                video_file = genai.get_file(video_file.name)
 
-        print('\nVideo processing complete')
+            if video_file.state.name == "FAILED":
+                return {
+                    "visual_recommendations": "Video processing failed",
+                    "visual_reasoning": f"Error: {video_file.error}"
+                }
 
-        prompt = """
-        You are an expert basketball free throw coach. Analyze this free throw shot video.
-        Focus on:
-        1. Starting position and setup
-        2. Body alignment through the shot
-        3. Shot mechanics (elbow, wrist, shoulder positioning)
-        4. Release point and follow-through
-        5. Overall flow and rhythm
+            print('\nVideo processing complete')
 
-        Provide specific feedback on:
-        1. What the player is doing well
-        2. Key areas for improvement
-        3. Specific form corrections needed
-        4. Tips for better consistency
+            prompt = """
+            You are an expert basketball free throw coach. Analyze this free throw shot video.
+            Focus on:
+            1. Starting position and setup
+            2. Body alignment through the shot
+            3. Shot mechanics (elbow, wrist, shoulder positioning)
+            4. Release point and follow-through
+            5. Overall flow and rhythm
 
-        Also provide a detailed breakdown with timestamps of key moments in the shot.
-        """
+            Provide specific feedback on:
+            1. What the player is doing well
+            2. Key areas for improvement
+            3. Specific form corrections needed
+            4. Tips for better consistency
 
-        # Generate analysis using the video file
-        response = self.model.generate_content([
-            video_file,
-            prompt
-        ])
-        
-        # Clean up the uploaded file
-        video_file.delete()
-        
-        visual_analysis = response.text.split('\n\n')
-        recommendations = [line for line in visual_analysis if line.startswith(('Good:', 'Improve:', 'Tip:'))]
-        reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
-        
-        return {
-            "visual_recommendations": " | ".join(recommendations),
-            "visual_reasoning": " | ".join(reasoning)
-        }
+            Also provide a detailed breakdown with timestamps of key moments in the shot.
+            """
+
+            # Generate analysis using the video file
+            response = self.model.generate_content([
+                video_file,
+                prompt
+            ])
+            
+            # Clean up the uploaded file
+            video_file.delete()
+            
+            visual_analysis = response.text.split('\n\n')
+            recommendations = [line for line in visual_analysis if line.startswith(('Good:', 'Improve:', 'Tip:'))]
+            reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
+            
+            return {
+                "visual_recommendations": " | ".join(recommendations),
+                "visual_reasoning": " | ".join(reasoning)
+            }
+
+        except Exception as e:
+            return {
+                "visual_recommendations": "Error analyzing video",
+                "visual_reasoning": f"An error occurred: {str(e)}"
+            }
 
     def analyze_form(self, metrics_list: list) -> Dict[str, str]:
         if not metrics_list:
