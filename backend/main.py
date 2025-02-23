@@ -1,5 +1,5 @@
 from typing import Union
-from backend.shot_detector import ShotDetector
+from shot_detector import ShotDetector
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import aiohttp
