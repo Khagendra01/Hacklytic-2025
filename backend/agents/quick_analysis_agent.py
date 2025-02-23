@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 from google.api_core import exceptions
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import Tool
-from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
@@ -103,20 +102,32 @@ class QuickAnalysisAgent:
 
             prompt = """
             You are an expert basketball free throw coach. Analyze this free throw shot video.
-            Focus on:
-            1. Starting position and setup
-            2. Body alignment through the shot
-            3. Shot mechanics (elbow, wrist, shoulder positioning)
-            4. Release point and follow-through
-            5. Overall flow and rhythm
+            Use the metrics data to:
+            FIRST,
+            Create a comparison of current metrics compared to ideal ranges such as the example below and suggest improvements to the user:
+            Ex. Elbow Angle (172.15°) ✅ Within range (165°–175°)
+                Knee Angle (177.20°) ❌ Exceeds range (140°–170°)
+                Release Height Ratio (1.78) ❌ Below range (1.8–2.3)
+                Shot Trajectory (-80.19°) ❌ Way off from range (45°–55°)
+                Shoulder Angle (144.21°) ❌ Exceeds range (90°–110°)
+                Torso Ratio (0.365) ✅ Within range (0.3–0.4)
+                Wrist Angle (171.32°) ❌ Exceeds range (70°–90°)
 
-            Provide specific feedback on:
-            1. What the player is doing well
-            2. Key areas for improvement
-            3. Specific form corrections needed
-            4. Tips for better consistency
+            SECOND,
+            Dive into, Deviation from Ideal Values
+            Quantifying how much the player deviates from the ideal range:
 
-            Also provide a detailed breakdown with timestamps of key moments in the shot.
+            Ex. Knee Angle: +7.20° (Overextended knees)
+            Release Height Ratio: -0.02 (Slightly lower than ideal)
+            Shot Trajectory: -125.19° (Very far from the ideal range)
+            Shoulder Angle: +34.21° (Overextended shoulder)
+            Wrist Angle: +81.32° (Overextended wrist)
+
+            LASTLY, summarise by collating suggestions as seen,
+            Ex. Overextended Knee & Shoulder Angles → Possible rigid form; may cause inefficiency in power transfer.
+            Wrist Overextension → Could lead to inconsistent spin and trajectory.
+            Shot Trajectory (-80°) → This is likely a miscalculation or a major issue since the ideal range is 45°–55°. Check if the data source for this value is correct.
+            Release Height Slightly Low → This could be a timing issue or a lower-than-optimal release point.
             """
 
             # Generate content with video
@@ -144,8 +155,8 @@ class QuickAnalysisAgent:
             reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
             
             return {
-                "visual_recommendations": " | ".join(recommendations) if recommendations else "No specific recommendations found",
-                "visual_reasoning": " | ".join(reasoning) if reasoning else "No detailed analysis available"
+                "visual_recommendations": " | ".join(recommendations) if recommendations else "",
+                "visual_reasoning": " | ".join(reasoning) if reasoning else ""
             }
 
         except Exception as e:
@@ -273,6 +284,6 @@ if __name__ == "__main__":
         }
     }]
     
-    video_path = "backend/noisy_images/clip_001.mp4"
+    video_path = "noisy_images/clip_001.mp4"
     result = get_quick_analysis(test_metrics, video_path)
     print('RESULT FETCHED', result)
