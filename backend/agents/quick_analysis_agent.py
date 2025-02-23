@@ -103,7 +103,7 @@ class QuickAnalysisAgent:
             prompt = """
             You are an expert basketball free throw coach. Analyze this free throw shot video.
             Use the metrics data to:
-            FIRST,
+            1,
             Create a comparison of current metrics compared to ideal ranges such as the example below and suggest improvements to the user:
             Ex. Elbow Angle (172.15°) ✅ Within range (165°–175°)
                 Knee Angle (177.20°) ❌ Exceeds range (140°–170°)
@@ -113,7 +113,7 @@ class QuickAnalysisAgent:
                 Torso Ratio (0.365) ✅ Within range (0.3–0.4)
                 Wrist Angle (171.32°) ❌ Exceeds range (70°–90°)
 
-            SECOND,
+            2,
             Dive into, Deviation from Ideal Values
             Quantifying how much the player deviates from the ideal range:
 
@@ -123,11 +123,13 @@ class QuickAnalysisAgent:
             Shoulder Angle: +34.21° (Overextended shoulder)
             Wrist Angle: +81.32° (Overextended wrist)
 
-            LASTLY, summarise by collating suggestions as seen,
+            3, summarise by collating suggestions as seen,
             Ex. Overextended Knee & Shoulder Angles → Possible rigid form; may cause inefficiency in power transfer.
             Wrist Overextension → Could lead to inconsistent spin and trajectory.
             Shot Trajectory (-80°) → This is likely a miscalculation or a major issue since the ideal range is 45°–55°. Check if the data source for this value is correct.
             Release Height Slightly Low → This could be a timing issue or a lower-than-optimal release point.
+
+            NOTE: DO NOT ADD ANY ADDITIONAL COMMENTS ABOUT VIDEO QUALITY, CAMERA ANGLE, OR ACCURACY OF DATA.
             """
 
             # Generate content with video
