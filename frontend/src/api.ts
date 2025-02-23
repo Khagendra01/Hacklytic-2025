@@ -24,14 +24,14 @@ export async function uploadVideo(file: File): Promise<VideoAnalysis> {
       throw new Error('Failed to process video');
     }
 
-    // const response = {
-    //   maskedUrl: 'https://firebasestorage.googleapis.com/v0/b/hacklytic2025.firebasestorage.app/o/videos%2Fmore3.mp4?alt=media&token=9dede87d-90c6-406d-ba2c-80d8bebd1662',
-    //   status: 'completed',
-    //   processedUrl: 'https://firebasestorage.googleapis.com/v0/b/hacklytic2025.firebasestorage.app/o/videos%2Fmore7.mp4?alt=media&token=14842411-2332-415d-9c14-817d9e216ae9'
-    // }
-
-    const analysis: VideoAnalysis = response;
-    return analysis;
+    const data = await response.json();
+    
+    return {
+      maskedUrl: data.masked_video_url,
+      processedUrl: data.processed_video_url,
+      status: 'completed',
+      shotMetrics: data.shot_metrics || []
+    };
   } catch (error) {
     console.error('Upload failed:', error);
     throw error;
