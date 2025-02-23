@@ -1,9 +1,19 @@
+import asyncio
+import os
+import sys
 from pathlib import Path
+
+# Add the project root directory to Python path
+project_root = str(Path(__file__).parent.parent.parent)
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 import cv2
 import mediapipe as mp
 import numpy as np
 from PIL import Image
+
+from backend.preprocessing.noise_masking import NoiseReducer
 
 
 class VideoReconstructionAgent:
@@ -205,12 +215,12 @@ class VideoReconstructionAgent:
                 'summary': ["Unable to analyze shot form. Please ensure the video shows a complete basketball shot."]
             }
         
-        # If we have metrics, process them
+        # Process metrics directly since it's a single dictionary
         adjustments = {}
         for metric, ideal_value in self.ideal_metrics.items():
-            if metric in shot_metrics[0]:  # Access first shot's metrics
+            if metric in shot_metrics:  # Remove the [0] index access
                 try:
-                    current = float(shot_metrics[0][metric])
+                    current = float(shot_metrics[metric])
                     if current > 0:  # Only process non-zero metrics
                         diff = ideal_value - current
                         adjustments[metric] = {
@@ -219,7 +229,7 @@ class VideoReconstructionAgent:
                             'adjustment': diff
                         }
                 except (ValueError, TypeError):
-                    print(f"Warning: Invalid value for metric {metric}: {shot_metrics[0][metric]}")
+                    print(f"Warning: Invalid value for metric {metric}: {shot_metrics[metric]}")
                     continue
         
         feedback = {
@@ -227,7 +237,6 @@ class VideoReconstructionAgent:
             'summary': []
         }
         
-        # Generate specific recommendations only if we have valid adjustments
         if adjustments:
             for metric, adj in adjustments.items():
                 if abs(adj['adjustment']) > 5:  # Significant adjustment needed
@@ -244,30 +253,26 @@ class VideoReconstructionAgent:
         if output_path is None:
             output_path = str(Path(input_video_path).parent / "ideal_form.mp4")
             
-        try:
-            # Check if input video exists
-            if not Path(input_video_path).exists():
-                raise FileNotFoundError(f"Input video not found: {input_video_path}")
-                
-            # Generate ideal form video
-            processed_video_path = self.generate_ideal_form_video(input_video_path, output_path)
+        # Check if input video exists
+        if not Path(input_video_path).exists():
+            raise FileNotFoundError(f"Input video not found: {input_video_path}")
             
-            # Get metrics from the video
-            metrics = self._extract_metrics_from_video(input_video_path)
-            
-            # Generate feedback
-            feedback = self.get_form_feedback(metrics)
-            
-            return {
-                'video_path': processed_video_path,
-                'metrics': metrics,
-                'feedback': feedback
-            }
-            
-        except Exception as e:
-            print(f"Error processing video: {str(e)}")
-            raise
-
+        # Generate ideal form video
+        processed_video_path = self.generate_ideal_form_video(input_video_path, output_path)
+        
+        # Get metrics from the video
+        metrics = self._extract_metrics_from_video(input_video_path)
+        
+        # Generate feedback
+        feedback = self.get_form_feedback(metrics)
+        
+        return {
+            'video_path': processed_video_path,
+            'metrics': metrics,
+            'feedback': feedback
+        }
+        
+   
     def _extract_metrics_from_video(self, video_path):
         """Extract metrics from key frames of the video"""
         metrics = {
@@ -316,29 +321,53 @@ class VideoReconstructionAgent:
         return metrics
 
 
-def main():
-    """Test function for the VideoReconstructionAgent"""
-    # Example usage
-    input_video = "backend/noisy_images/clip_001.mp4"
-    agent = VideoReconstructionAgent()
+def get_reconstructed_video(input_video: str, output_path: str):
+    """
+    Process video and return metrics
+    Args:
+        input_video: Path to input video file
+        output_path: Optional path to save output video. If None, uses default path
+    Returns:
+        Dictionary containing metrics and path to processed video
+    """
+    # Get absolute paths
+    input_path = str(Path(input_video).resolve())
     
-    try:
-        result = agent.process_video(input_video)
-        
-        print("\nProcessing Complete!")
-        print(f"Output video saved to: {result['video_path']}")
-        
-        print("\nMetrics:")
-        for metric, value in result['metrics'].items():
-            print(f"{metric}: {value:.1f}°")
-        
-        print("\nFeedback Summary:")
-        for feedback in result['feedback']['summary']:
-            print(f"- {feedback}")
-            
-    except Exception as e:
-        print(f"Error: {str(e)}")
 
+    output_dir = Path(output_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = str(Path(output_path).resolve())
 
-if __name__ == "__main__":
-    main()
+    print(f"Processing video from: {input_path}")
+    print(f"Output will be saved to: {output_path}")
+
+    # Process video
+    noise_reducer = NoiseReducer()
+    asyncio.run(noise_reducer.process_video(input_path, output_path))
+
+    agent = VideoReconstructionAgent()
+    result = agent.process_video(output_path)
+    
+    print("\nProcessing Complete!")
+    print(f"Output video saved to: {result['video_path']}")
+    
+    print("\nMetrics:")
+    for metric, value in result['metrics'].items():
+        print(f"{metric}: {value:.1f}°")
+    
+    print("\nFeedback Summary:")
+    for feedback in result['feedback']['summary']:
+        print(f"- {feedback}")
+
+    return {
+        'metrics': result['metrics'],
+        'video_path': result['video_path'],
+        'feedback': result['feedback']
+    }
+
+# if __name__ == "__main__":
+#     # Example usage with custom output path
+#     result = get_reconstructed_video(
+#         input_video="noisy_images/clip_062.mp4",
+#         output_path="noisy_images/my_custom_output.mp4"
+#     )

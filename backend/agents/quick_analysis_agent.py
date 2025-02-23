@@ -56,38 +56,50 @@ class ShootingMetrics:
         )
 
 class QuickAnalysisAgent:
-    def __init__(self):
-        self.video_path = 'backend/noisy_images/analysis.mp4'
+    def __init__(self, video_url: str = None):
+        """
+        Initialize the agent with a video URL
+        Args:
+            video_url: Path to the video file to analyze
+        """
+        self.video_url = video_url
+        self.video_path = 'backend/noisy_images/analysis.mp4'  # Default analysis output path
         self.model = genai.GenerativeModel("gemini-1.5-pro")
+        
+    def set_video(self, video_url: str):
+        """Update the video URL after initialization"""
+        self.video_url = video_url
         
     def analyze_video(self) -> Dict[str, str]:
         """Analyze the video content using Gemini Vision."""
         try:
-            if not os.path.exists(self.video_path):
+            if not self.video_url or not os.path.exists(self.video_url):
                 return {
                     "visual_recommendations": "Video file not found",
-                    "visual_reasoning": "Unable to analyze video: File not found"
+                    "visual_reasoning": f"Unable to analyze video: File not found at {self.video_url}"
                 }
 
-            print("Uploading video file...")
-            # Upload the video file using the Files API
-            with open(self.video_path, 'rb') as f:
-                video_file = genai.upload_file(self.video_path, file=f)
-            print(f"Completed upload: {video_file.name}")
+            print(f"Analyzing video: {self.video_url}")
+            
+            # Read video file as binary
+            with open(self.video_url, 'rb') as f:
+                video_bytes = f.read()
+            
+            # Create generation config
+            generation_config = {
+                "temperature": 0.4,
+                "top_p": 1,
+                "top_k": 32,
+                "max_output_tokens": 2048,
+            }
 
-            # Wait for video processing
-            while video_file.state.name == "PROCESSING":
-                print('.', end='', flush=True)
-                time.sleep(5)
-                video_file = genai.get_file(video_file.name)
-
-            if video_file.state.name == "FAILED":
-                return {
-                    "visual_recommendations": "Video processing failed",
-                    "visual_reasoning": f"Error: {video_file.error}"
-                }
-
-            print('\nVideo processing complete')
+            # Create safety settings
+            safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+            ]
 
             prompt = """
             You are an expert basketball free throw coach. Analyze this free throw shot video.
@@ -107,25 +119,37 @@ class QuickAnalysisAgent:
             Also provide a detailed breakdown with timestamps of key moments in the shot.
             """
 
-            # Generate analysis using the video file
-            response = self.model.generate_content([
-                video_file,
-                prompt
-            ])
-            
-            # Clean up the uploaded file
-            video_file.delete()
-            
+            # Generate content with video
+            response = self.model.generate_content(
+                contents=[
+                    {
+                        "parts": [
+                            {"text": prompt},
+                            {"inline_data": {
+                                "mime_type": "video/mp4",
+                                "data": base64.b64encode(video_bytes).decode('utf-8')
+                            }}
+                        ]
+                    }
+                ],
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+
+            if response.prompt_feedback:
+                print("Prompt feedback:", response.prompt_feedback)
+
             visual_analysis = response.text.split('\n\n')
             recommendations = [line for line in visual_analysis if line.startswith(('Good:', 'Improve:', 'Tip:'))]
             reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
             
             return {
-                "visual_recommendations": " | ".join(recommendations),
-                "visual_reasoning": " | ".join(reasoning)
+                "visual_recommendations": " | ".join(recommendations) if recommendations else "No specific recommendations found",
+                "visual_reasoning": " | ".join(reasoning) if reasoning else "No detailed analysis available"
             }
 
         except Exception as e:
+            print(f"Error in analyze_video: {str(e)}")
             return {
                 "visual_recommendations": "Error analyzing video",
                 "visual_reasoning": f"An error occurred: {str(e)}"
@@ -181,89 +205,74 @@ class QuickAnalysisAgent:
             "coach_reasoning": video_analysis["visual_reasoning"] + " || Metric analysis: " + " | ".join(reasoning)
         }
 
-def initialize_agent():
+def initialize_agent(video_url: str = None):
     """Initialize the quick analysis agent using Gemini."""
     model = genai.GenerativeModel('gemini-1.5-pro')
-    analyzer = QuickAnalysisAgent()
+    analyzer = QuickAnalysisAgent(video_url)
     
     def analyze_shot(metrics_data: list) -> Dict[str, str]:
-        # Prepare the prompt with metrics data
-        prompt = (
-            "As an expert free throw coach, analyze this player's shooting form metrics:\n\n"
-            f"{json.dumps(metrics_data, indent=2)}\n\n"
-            "Focus on:\n"
-            "1. The most critical aspects that need immediate attention\n"
-            "2. Specific drills to improve these areas\n"
-            "3. Positive aspects of their form to build upon\n"
-            "4. Mental tips for consistent free throw shooting\n\n"
-            "Provide your response in strict JSON format like this:\n"
-            '{\n'
-            '    "coach_recommendations": "Write your key points for improvement here",\n'
-            '    "coach_reasoning": "Write your detailed analysis and explanation here"\n'
-            '}\n'
-            'Important: Response must be valid JSON only, no other text.'
-        )
-
-        # Get analysis from Gemini
-        response = model.generate_content(prompt)
-        
-        # Print response for debugging
-        print("Raw response from Gemini:")
-        print(response.text)
-        
-        try:
-            # Try to parse as JSON
-            metrics_analysis = json.loads(response.text)
-        except json.JSONDecodeError:
-            # If JSON parsing fails, create a structured response from the text
-            metrics_analysis = {
-                "coach_recommendations": "Analysis format error",
-                "coach_reasoning": response.text
-            }
-        
-        video_analysis = analyzer.analyze_form(metrics_data)
-        
-        return {
-            "coach_recommendations": (
-                f"Video Analysis: {video_analysis['coach_recommendations']}\n"
-                f"Metrics Analysis: {metrics_analysis['coach_recommendations']}"
-            ),
-            "coach_reasoning": (
-                f"Video Breakdown: {video_analysis['coach_reasoning']}\n"
-                f"Metrics Breakdown: {metrics_analysis['coach_reasoning']}"
-            )
-        }
+        if video_url:
+            analyzer.set_video(video_url)
+        return analyzer.analyze_form(metrics_data)
 
     return analyze_shot
 
-def main():
-    # Test data
-    test_metrics = [{
-        'elbow_angle': 176.23948929424307,
-        'wrist_angle': 179.57559458063852,
-        'shoulder_angle': 11.791874720340788,
-        'knee_angle': 174.5554432396471,
-        'shot_trajectory': -53.27286562892127,
-        'release_height_ratio': 2.9242424242424243,
-        'player_height_pixels': 115,
-        'torso_size_pixels': 49,
-        'torso_ratio': 0.4260869565217391,
-        'release_height': 242,
-        'ideal_ranges': {
-            'elbow_angle': (165, 175),
-            'wrist_angle': (70, 90),
-            'shoulder_angle': (90, 110),
-            'knee_angle': (140, 170),
-            'shot_trajectory': (45, 55),
-            'release_height_ratio': (1.8, 2.3),
-            'torso_ratio': (0.3, 0.4)
-        }
-    }]
-
-    # Initialize and run the agent
-    analyze_shot = initialize_agent()
-    result = analyze_shot(test_metrics)
-    print(json.dumps(result, indent=2))
+def get_quick_analysis(metrics_data: list, video_url: str = None) -> Dict[str, str]:
+    """
+    Get quick analysis for metrics and video
+    Args:
+        metrics_data: List of metrics dictionaries
+        video_url: Optional path to video file
+    """
+    analyze_shot = initialize_agent(video_url)
+    result = analyze_shot(metrics_data)
+    return result
 
 if __name__ == "__main__":
-    main()
+    # Example usage
+    test_metrics = [{
+        "elbow_angle": 172.15237249531512,
+        "wrist_angle": 171.32183111475928,
+        "shoulder_angle": 144.21102654081665,
+        "knee_angle": 177.204574709685,
+        "shot_trajectory": -80.18521332794774,
+        "release_height_ratio": 1.776470588235294,
+        "player_height_pixels": 189,
+        "torso_size_pixels": 69,
+        "torso_ratio": 0.36507936507936506,
+        "release_height": 255,
+        "ideal_ranges": {
+            "elbow_angle": [
+                165,
+                175
+            ],
+            "wrist_angle": [
+                70,
+                90
+            ],
+            "shoulder_angle": [
+                90,
+                110
+            ],
+            "knee_angle": [
+                140,
+                170
+            ],
+            "shot_trajectory": [
+                45,
+                55
+            ],
+            "release_height_ratio": [
+                1.8,
+                2.3
+            ],
+            "torso_ratio": [
+                0.3,
+                0.4
+            ]
+        }
+    }]
+    
+    video_path = "backend/noisy_images/clip_001.mp4"
+    result = get_quick_analysis(test_metrics, video_path)
+    print('RESULT FETCHED', result)
