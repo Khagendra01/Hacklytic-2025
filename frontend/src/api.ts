@@ -38,3 +38,24 @@ export async function uploadVideo(file: File): Promise<VideoAnalysis> {
     throw error;
   }
 }
+
+interface VideoAnalysisRequest {
+  url: string;
+  timeframe: string;
+}
+
+export const analyzeVideos = async (videos: VideoAnalysisRequest[]) => {
+  const response = await fetch(`${API_URL}/api/analyze-videos`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ file1: videos[0].url, file2: videos[1].url }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to analyze videos');
+  }
+
+  return response.json();
+};
