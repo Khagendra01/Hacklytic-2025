@@ -89,75 +89,91 @@ class ShotDetector:
         self.below_shoulder = False
         self.above_shoulder = False
 
-        # Add new instance variables for storing angles
-        self.shot_metrics = []  # Will store metrics for each shot
+        # Initialize shot_metrics as an empty list
+        self.shot_metrics = []
 
         # Add video FPS tracking
-        self.shot_timestamps = []  # Will store timestamps of shots
+        self.shot_timestamps = []
 
         try:
             release_angle, follow_through_angle, left_feet_heights, right_feet_heights, shot_metrics = self.run()
-            self.shot_metrics = shot_metrics
-            print(f'\nShooting Form Analysis:')
-            print(f'Shot Trajectory: {release_angle:.1f}° (Ideal: 45-55°)')
-            print(f'Follow Through Angle: {follow_through_angle:.1f}°')
-            
-            # Print detailed metrics for each shot
-            for i, metrics in enumerate(shot_metrics):
-                print(f"\nShot {i+1} Metrics:")
-                ideal = metrics['ideal_ranges']
+            if shot_metrics:  # Only update if we got valid metrics
+                self.shot_metrics = shot_metrics
+                print(f'\nShooting Form Analysis:')
+                print(f'Shot Trajectory: {release_angle:.1f}° (Ideal: 45-55°)')
+                print(f'Follow Through Angle: {follow_through_angle:.1f}°')
                 
-                def print_metric(name, value, ideal_range):
-                    status = "GOOD" if ideal_range[0] <= value <= ideal_range[1] else "ADJUST"
-                    feedback = ""
+                # Print detailed metrics for each shot
+                for i, metrics in enumerate(shot_metrics):
+                    if not metrics:  # Skip if metrics is None or empty
+                        continue
+                    print(f"\nShot {i+1} Metrics:")
+                    ideal = metrics.get('ideal_ranges', {})
                     
-                    if status == "ADJUST":
-                        if value < ideal_range[0]:
-                            if name == "Shot Trajectory":
-                                feedback = "- Shot too flat, increase release angle"
-                            elif name == "Elbow Angle":
-                                feedback = "- Elbow too bent, extend more"
-                            elif name == "Wrist Angle":
-                                feedback = "- Not enough wrist flexion"
-                            elif name == "Shoulder Angle":
-                                feedback = "- Arms too low, raise shooting pocket"
-                            elif name == "Knee Angle":
-                                feedback = "- Bending knees too much"
+                    def print_metric(name, value, ideal_range):
+                        if value is None or ideal_range is None:
+                            return
+                        try:
+                            value = float(value)
+                            status = "GOOD" if ideal_range[0] <= value <= ideal_range[1] else "ADJUST"
+                            feedback = ""
+                            
+                            if status == "ADJUST":
+                                if value < ideal_range[0]:
+                                    if name == "Shot Trajectory":
+                                        feedback = "- Shot too flat, increase release angle"
+                                    elif name == "Elbow Angle":
+                                        feedback = "- Elbow too bent, extend more"
+                                    elif name == "Wrist Angle":
+                                        feedback = "- Not enough wrist flexion"
+                                    elif name == "Shoulder Angle":
+                                        feedback = "- Arms too low, raise shooting pocket"
+                                    elif name == "Knee Angle":
+                                        feedback = "- Bending knees too much"
+                                else:
+                                    if name == "Shot Trajectory":
+                                        feedback = "- Shot too high, decrease release angle"
+                                    elif name == "Elbow Angle":
+                                        feedback = "- Elbow locked, maintain slight bend"
+                                    elif name == "Wrist Angle":
+                                        feedback = "- Too much wrist flexion"
+                                    elif name == "Shoulder Angle":
+                                        feedback = "- Arms too high, lower shooting pocket"
+                                    elif name == "Knee Angle":
+                                        feedback = "- Not enough knee bend"
+                            
+                            print(f"{name}: {value:.1f}° (Ideal: {ideal_range[0]}-{ideal_range[1]}°) - {status} {feedback}")
+                        except (ValueError, TypeError) as e:
+                            print(f"Warning: Could not process metric {name}: {e}")
+                    
+                    # Safely get metrics with default values if missing
+                    metrics_to_print = {
+                        'Elbow Angle': (metrics.get('elbow_angle', 0), ideal.get('elbow_angle')),
+                        'Wrist Angle': (metrics.get('wrist_angle', 0), ideal.get('wrist_angle')),
+                        'Shoulder Angle': (metrics.get('shoulder_angle', 0), ideal.get('shoulder_angle')),
+                        'Knee Angle': (metrics.get('knee_angle', 0), ideal.get('knee_angle')),
+                        'Shot Trajectory': (metrics.get('shot_trajectory', 0), ideal.get('shot_trajectory'))
+                    }
+                    
+                    for name, (value, ideal_range) in metrics_to_print.items():
+                        print_metric(name, value, ideal_range)
+                    
+                    # Add release height feedback
+                    ratio = metrics.get('release_height_ratio', 0)
+                    if ratio > 0:  # Only print if we have a valid ratio
+                        print(f"Release Height Ratio: {ratio:.2f}", end=" ")
+                        if ratio < 1.8:
+                            print("- Releasing too low, extend up more")
+                        elif ratio > 2.3:
+                            print("- Releasing too high, might affect consistency")
                         else:
-                            if name == "Shot Trajectory":
-                                feedback = "- Shot too high, decrease release angle"
-                            elif name == "Elbow Angle":
-                                feedback = "- Elbow locked, maintain slight bend"
-                            elif name == "Wrist Angle":
-                                feedback = "- Too much wrist flexion"
-                            elif name == "Shoulder Angle":
-                                feedback = "- Arms too high, lower shooting pocket"
-                            elif name == "Knee Angle":
-                                feedback = "- Not enough knee bend"
-                    
-                    print(f"{name}: {value:.1f}° (Ideal: {ideal_range[0]}-{ideal_range[1]}°) - {status} {feedback}")
-                
-                print_metric("Elbow Angle", metrics['elbow_angle'], ideal['elbow_angle'])
-                print_metric("Wrist Angle", metrics['wrist_angle'], ideal['wrist_angle'])
-                print_metric("Shoulder Angle", metrics['shoulder_angle'], ideal['shoulder_angle'])
-                print_metric("Knee Angle", metrics['knee_angle'], ideal['knee_angle'])
-                print_metric("Shot Trajectory", metrics['shot_trajectory'], ideal['shot_trajectory'])
-                
-                # Add release height feedback
-                ratio = metrics['release_height_ratio']
-                print(f"Release Height Ratio: {ratio:.2f}", end=" ")
-                if ratio < 1.8:
-                    print("- Releasing too low, extend up more")
-                elif ratio > 2.3:
-                    print("- Releasing too high, might affect consistency")
-                else:
-                    print("- GOOD")
+                            print("- GOOD")
             
-            left_release_height = np.mean(left_feet_heights[0:50]) - left_feet_heights[-1]
-            right_release_height = np.mean(right_feet_heights[0:50]) - right_feet_heights[-1]
-            print(f'RELEASE HEIGHT: {np.mean([left_release_height, right_release_height]):.1f}')
+            if left_feet_heights and right_feet_heights:
+                left_release_height = np.mean(left_feet_heights[0:50]) - left_feet_heights[-1]
+                right_release_height = np.mean(right_feet_heights[0:50]) - right_feet_heights[-1]
+                print(f'RELEASE HEIGHT: {np.mean([left_release_height, right_release_height]):.1f}')
 
-            
         except Exception as e:
             print(f"\nAn error occurred: {str(e)}")
         finally:
@@ -256,12 +272,6 @@ class ShotDetector:
             left_feet_heights.append(self.lmList[29][2])
             right_feet_heights.append(self.lmList[30][2])
 
-            # if did_follow_through:
-            #     if follow_through_angle > follow_through_best:
-            #         cv2.putText(self.frame, 'GOOD FOLLOW THROUGH', (50, 125), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
-            #     else:
-            #         cv2.putText(self.frame, 'DIDN\'T FOLLOW THROUGH', (50, 125), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-
             if already_released and not did_follow_through:
                 if self.frame_count - release_frame > follow_through_iter:
                     angle = self.detector.findAngle(self.img, 12, 14, 16, draw=True)
@@ -269,16 +279,10 @@ class ShotDetector:
                     if angle > follow_through_angle:
                         follow_through_angle = angle
 
-                    # cv2.imwrite(f'follow-through/{temp}.jpg', self.img)
                     follow_through_iter += 1
-                    # print(f'{temp} error -> {follow_through_angle} angle')
 
                     if follow_through_iter >= 40:
                         did_follow_through = True
-
-                # if self.frame_count - release_frame < 12:
-                #     cv2.putText(self.frame, 'REMEMBER TO FOLLOW THROUGH', (50, 125), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
-
 
             elif not did_follow_through:
                 if(self.ball_pos):
@@ -302,15 +306,9 @@ class ShotDetector:
                         if self.frame_count % 10 == 0:
                             last_angle = angle
 
-                        # if angle_decreasing and abs(angle - 60) <= angle_error:
-                        #     print(f'loaded angle: {angle}')
-                        #     cv2.putText(self.frame, 'RELEASE NOW', (50, 125), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
-
                             if not already_beeped:
                                 subprocess.run('osascript -e "beep"', shell=True)
                                 already_beeped = True
-
-                            # cv2.imwrite('loaded_angle.jpg', self.img)
 
                         self.above_shoulder = True
 
@@ -449,11 +447,6 @@ class ShotDetector:
                     self.fade_counter = self.fade_frames
 
     def display_score(self):
-        # Add text
-        # text = str(self.makes) + " / " + str(self.attempts)
-        # cv2.putText(self.frame, text, (50, 125), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 6)
-        # cv2.putText(self.frame, text, (50, 125), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 0), 3)
-
         # Gradually fade out color after shot
         if self.fade_counter > 0:
             alpha = 0.2 * (self.fade_counter / self.fade_frames)

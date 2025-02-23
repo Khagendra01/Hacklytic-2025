@@ -45,12 +45,12 @@ interface VideoAnalysisRequest {
 }
 
 export const analyzeVideos = async (videos: VideoAnalysisRequest[]) => {
-  const response = await fetch(`${API_URL}/api/analyze-videos`, {
+  const response = await fetch(`${API_URL}/talent_scout`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ file1: videos[0].url, file2: videos[1].url }),
+    body: JSON.stringify({ video1_url: videos[0].url, video2_url: videos[1].url }),
   });
 
   if (!response.ok) {
