@@ -34,6 +34,11 @@ app.add_middleware(
 class VideoRequest(BaseModel):
     video_url: str
 
+# Add this class for talent scout endpoint
+class VideoComparisonRequest(BaseModel):
+    video1_url: str
+    video2_url: str
+
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
@@ -143,3 +148,86 @@ async def test_firebase():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Firebase test failed: {str(e)}")
+
+@app.post("/api/talent_scout")
+async def analyze_talent(request: VideoComparisonRequest):
+    try:
+        # Create temporary directory if it doesn't exist
+        temp_dir = "temp_videos"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Generate unique filenames for both videos
+        video1_path = os.path.join(temp_dir, f"video1_{uuid.uuid4()}.mp4")
+        video2_path = os.path.join(temp_dir, f"video2_{uuid.uuid4()}.mp4")
+        
+        # Download both videos
+        async with aiohttp.ClientSession() as session:
+            # Download first video
+            async with session.get(request.video1_url) as response:
+                if response.status != 200:
+                    raise HTTPException(status_code=400, detail="Failed to download first video")
+                content = await response.read()
+                with open(video1_path, 'wb') as f:
+                    f.write(content)
+            
+            # Download second video
+            async with session.get(request.video2_url) as response:
+                if response.status != 200:
+                    raise HTTPException(status_code=400, detail="Failed to download second video")
+                content = await response.read()
+                with open(video2_path, 'wb') as f:
+                    f.write(content)
+
+        # Process first video with shot detector
+        detector1 = ShotDetector(unmasked_video_path=video1_path)
+        video1_metrics = detector1.shot_metrics
+        if not video1_metrics:
+            raise HTTPException(status_code=400, detail="No metrics detected from first video")
+
+        # Process second video with shot detector
+        detector2 = ShotDetector(unmasked_video_path=video2_path)
+        video2_metrics = detector2.shot_metrics
+        if not video2_metrics:
+            raise HTTPException(status_code=400, detail="No metrics detected from second video")
+
+        # Upload both videos to Firebase
+        try:
+            firebase_video1_path = f"talent_scout_videos/video1_{uuid.uuid4()}.mp4"
+            firebase_video2_path = f"talent_scout_videos/video2_{uuid.uuid4()}.mp4"
+            
+            video1_url = firebase_manager.upload_file(video1_path, firebase_video1_path)
+            video2_url = firebase_manager.upload_file(video2_path, firebase_video2_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload videos to Firebase: {str(e)}")
+
+        # Initialize talent scout and perform analysis
+        from agents.talent_scout_agent import TalentScoutAgent
+        scout = TalentScoutAgent()
+        
+        analysis = scout.analyze_talent(
+            video1_metrics=video1_metrics[0],
+            video2_metrics=video2_metrics[0],
+            video1_path=video1_path,
+            video2_path=video2_path
+        )
+
+        return {
+            "status": "success",
+            "video1_url": video1_url,
+            "video2_url": video2_url,
+            "video1_metrics": video1_metrics[0],
+            "video2_metrics": video2_metrics[0],
+            "analysis": analysis
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        # Clean up temporary files
+        for path in [video1_path, video2_path]:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    print(f"Failed to remove temporary file {path}: {e}")
