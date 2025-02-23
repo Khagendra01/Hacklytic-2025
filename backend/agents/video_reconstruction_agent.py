@@ -326,30 +326,36 @@ def get_reconstructed_video(input_video: str, output_path: str):
     Process video and return metrics
     Args:
         input_video: Path to input video file
-        output_path: Optional path to save output video. If None, uses default path
+        output_path: Path to save output video
     Returns:
-        Dictionary containing metrics and path to processed video
+        Dictionary containing metrics and paths to both masked and reconstructed videos
     """
     # Get absolute paths
     input_path = str(Path(input_video).resolve())
     
-
+    # Create output directory
     output_dir = Path(output_path).parent
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = str(Path(output_path).resolve())
+    
+    # Generate paths for both masked and reconstructed videos
+    masked_path = str(output_dir / f"masked_{Path(output_path).name}")
+    reconstructed_path = str(output_dir / f"{Path(output_path).name}")
 
     print(f"Processing video from: {input_path}")
-    print(f"Output will be saved to: {output_path}")
+    print(f"Masked video will be saved to: {masked_path}")
+    print(f"Reconstructed video will be saved to: {reconstructed_path}")
 
-    # Process video
+    # First process video with noise reduction
     noise_reducer = NoiseReducer()
-    asyncio.run(noise_reducer.process_video(input_path, output_path))
+    asyncio.run(noise_reducer.process_video(input_path, masked_path))
 
+    # Then generate reconstructed video with pose analysis
     agent = VideoReconstructionAgent()
-    result = agent.process_video(output_path)
+    result = agent.process_video(masked_path, reconstructed_path)
     
     print("\nProcessing Complete!")
-    print(f"Output video saved to: {result['video_path']}")
+    print(f"Masked video saved to: {masked_path}")
+    print(f"Reconstructed video saved to: {result['video_path']}")
     
     print("\nMetrics:")
     for metric, value in result['metrics'].items():
@@ -361,13 +367,14 @@ def get_reconstructed_video(input_video: str, output_path: str):
 
     return {
         'metrics': result['metrics'],
-        'video_path': result['video_path'],
+        'masked_video_path': masked_path,
+        'reconstructed_video_path': result['video_path'],
         'feedback': result['feedback']
     }
 
-# if __name__ == "__main__":
-#     # Example usage with custom output path
-#     result = get_reconstructed_video(
-#         input_video="noisy_images/clip_062.mp4",
-#         output_path="noisy_images/my_custom_output.mp4"
-#     )
+if __name__ == "__main__":
+    # Example usage with custom output path
+    result = get_reconstructed_video(
+        input_video="noisy_images/clip_001.mp4",
+        output_path="noisy_images/output.mp4"
+    )
