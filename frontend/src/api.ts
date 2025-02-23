@@ -27,10 +27,11 @@ export async function uploadVideo(file: File): Promise<VideoAnalysis> {
     const data = await response.json();
     
     return {
-      maskedUrl: data.masked_video_url,
-      processedUrl: data.processed_video_url,
+      masked_video_url: data.masked_video_url,
+      processed_video_url: data.processed_video_url,
       status: 'completed',
-      shotMetrics: data.shot_metrics || []
+      shot_metrics: data.shot_metrics || [],
+      analysis: data.analysis
     };
   } catch (error) {
     console.error('Upload failed:', error);
