@@ -1,44 +1,11 @@
-from typing import Union
-from backend.shot_detector import ShotDetector
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import aiohttp
 import os
 import uuid
-from preprocessing.noise_masking import NoiseReducer, MaskingConfig
-from firebase.firebase_storage import FirebaseStorageManager
-import asyncio
-
-app = FastAPI()
-
-# Initialize Firebase Storage Manager
-firebase_manager = FirebaseStorageManager(
-    bucket_name='hacklytic2025.firebasestorage.app'
-)
-
-# Initialize NoiseReducer
-noise_reducer = NoiseReducer(MaskingConfig())
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
-)
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-
-@app.get("/items/{item_id}")
-async def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
-
-@app.post("/api/mask_video")
-async def mask_video(video_url: str):
+import aiohttp
+from fastapi import HTTPException
+from backend.shot_detector import ShotDetector
+from backend.noise_reducer import NoiseReducer
+from backend.firebase_manager import firebase_manager
+async def process_video(video_url: str):
     try:
         # Create temporary directory if it doesn't exist
         temp_dir = "temp_videos"
@@ -81,6 +48,7 @@ async def mask_video(video_url: str):
         # # Upload shot metrics to Firebase
         # firebase_shot_metrics_path = f"shot_metrics/{os.path.basename(output_video_path)}"
         # public_shot_metrics_url = firebase_manager.upload_file(shot_metrics, firebase_shot_metrics_path)
+
         
         return {"masked_video_url": public_url, "processed_video_url": public_processed_url, "shot_metrics": shot_metrics}
         
@@ -91,23 +59,3 @@ async def mask_video(video_url: str):
         if 'output_video_path' in locals() and os.path.exists(output_video_path):
             os.remove(output_video_path)
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/test_firebase")
-async def test_firebase():
-    try:
-        test_file = "output_video.mp4"
-        if not os.path.exists(test_file):
-            raise HTTPException(status_code=404, detail="Test file not found")
-            
-        # Try uploading to Firebase
-        firebase_path = f"test_uploads/{os.path.basename(test_file)}"
-        public_url = firebase_manager.upload_file(test_file, firebase_path)
-        
-        return {
-            "status": "success",
-            "message": "Test file uploaded successfully",
-            "url": public_url
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Firebase test failed: {str(e)}")
