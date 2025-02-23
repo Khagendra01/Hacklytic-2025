@@ -1,4 +1,5 @@
 from typing import Union
+from agents.quick_analysis_agent import get_quick_analysis
 from shot_detector import ShotDetector
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -102,10 +103,13 @@ async def mask_video(request: VideoRequest):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to process or upload analyzed video: {str(e)}")
         
+        analysis = get_quick_analysis(metrics_data=shot_metrics, video_url=output_file_dir)
+        
         return {
             "masked_video_url": firebase_unmasked_url,
             "processed_video_url": firebase_processed_url,
-            "shot_metrics": shot_metrics
+            "shot_metrics": shot_metrics,
+            "analysis": analysis
         }
         
     except Exception as e:
