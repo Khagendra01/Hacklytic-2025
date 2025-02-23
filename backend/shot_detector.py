@@ -25,7 +25,7 @@ from utils import (
 class ShotDetector:
     def __init__(self, unmasked_video_path = None):
         # Load the YOLO model created from main.py - change text to your relative path
-        self.model = YOLO("backend/runs/detect/train/weights/best.pt")
+        self.model = YOLO("runs/detect/train/weights/best.pt")
         self.class_names = ['Basketball', 'Basketball Hoop']
         # Uncomment line below to use webcam (I streamed to my iPhone using Iriun Webcam)
         # self.cap = cv2.VideoCapture(0)
@@ -70,7 +70,7 @@ class ShotDetector:
         self.shot_metrics = []  # Will store metrics for each shot
 
         # Add video writer setup
-        self.output_path = 'backend/noisy_images/analysis.mp4'  # Changed path
+        self.output_path = f'processed_videos/{os.path.basename(self.unmasked_video_path)}'  # Changed path
         frame = self.cap.read()[1]  # Read first frame to get dimensions
         self.frame_width = int(frame.shape[1])
         self.frame_height = int(frame.shape[0])
@@ -584,7 +584,7 @@ if __name__ == "__main__":
     # project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     # print(f"Project root: {project_root}")  # Debug print
     # Construct full paths using project root
-    input_video = "backend/noisy_images/steph3.mp4"
+    input_video = "noisy_images/clip_001.mp4"
     output_video = "backend/noisy_images/masked_shot.mp4"
     
     # Debug prints
