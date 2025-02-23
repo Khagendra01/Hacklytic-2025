@@ -62,34 +62,60 @@ class QuickAnalysisAgent:
             video_url: Path to the video file to analyze
         """
         self.video_url = video_url
-        self.video_path = 'backend/noisy_images/analysis.mp4'  # Default analysis output path
+        
+        # Configure Gemini
+        if not GOOGLE_API_KEY:
+            raise ValueError("GOOGLE_API_KEY not found in environment variables")
+        
+        genai.configure(api_key=GOOGLE_API_KEY)
         self.model = genai.GenerativeModel("gemini-1.5-pro")
+        
+        print(f"Agent initialized with video: {video_url}")
         
     def set_video(self, video_url: str):
         """Update the video URL after initialization"""
         self.video_url = video_url
         
-    def analyze_video(self) -> Dict[str, str]:
+    def analyze_video(self, metrics_data: Dict) -> Dict[str, str]:
         """Analyze the video content using Gemini Vision."""
         try:
             if not self.video_url or not os.path.exists(self.video_url):
-                return {
-                    "visual_recommendations": "Video file not found",
-                    "visual_reasoning": f"Unable to analyze video: File not found at {self.video_url}"
-                }
+                raise FileNotFoundError(f"Video file not found at: {self.video_url}")
 
-            print(f"Analyzing video: {self.video_url}")
+            print(f"Starting analysis of video: {self.video_url}")
+            print(f"Using metrics: {metrics_data}")
             
             # Read video file as binary
             with open(self.video_url, 'rb') as f:
                 video_bytes = f.read()
+                print(f"Successfully read video file ({len(video_bytes)} bytes)")
             
+            # Format metrics data for prompt
+            metrics_str = "\n".join([
+                f"{key}: {value:.2f}°" if isinstance(value, (int, float)) else f"{key}: {value}"
+                for key, value in metrics_data.items()
+                if key != 'ideal_ranges' and not isinstance(value, (list, dict))
+            ])
+            
+            # Format ideal ranges
+            ideal_ranges = metrics_data.get('ideal_ranges', {})
+            ranges_str = "\n".join([
+                f"{key} ideal range: {range_[0]}-{range_[1]}°"
+                for key, range_ in ideal_ranges.items()
+            ])
+
+            print("\nFormatted metrics for analysis:")
+            print(metrics_str)
+            print("\nIdeal ranges:")
+            print(ranges_str)
+
             # Create generation config
             generation_config = {
                 "temperature": 0.4,
                 "top_p": 1,
                 "top_k": 32,
                 "max_output_tokens": 2048,
+                
             }
 
             # Create safety settings
@@ -100,36 +126,34 @@ class QuickAnalysisAgent:
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
             ]
 
-            prompt = """
-            You are an expert basketball free throw coach. Analyze this free throw shot video.
-            Use the metrics data to:
-            1,
-            Create a comparison of current metrics compared to ideal ranges such as the example below and suggest improvements to the user:
-            Ex. Elbow Angle (172.15°) ✅ Within range (165°–175°)
-                Knee Angle (177.20°) ❌ Exceeds range (140°–170°)
-                Release Height Ratio (1.78) ❌ Below range (1.8–2.3)
-                Shot Trajectory (-80.19°) ❌ Way off from range (45°–55°)
-                Shoulder Angle (144.21°) ❌ Exceeds range (90°–110°)
-                Torso Ratio (0.365) ✅ Within range (0.3–0.4)
-                Wrist Angle (171.32°) ❌ Exceeds range (70°–90°)
+            prompt = f"""
+            You are an expert basketball free throw coach. Analyze this free throw shot video and the provided metrics.
 
-            2,
-            Dive into, Deviation from Ideal Values
-            Quantifying how much the player deviates from the ideal range:
+            Current Metrics:
+            {metrics_str}
 
-            Ex. Knee Angle: +7.20° (Overextended knees)
-            Release Height Ratio: -0.02 (Slightly lower than ideal)
-            Shot Trajectory: -125.19° (Very far from the ideal range)
-            Shoulder Angle: +34.21° (Overextended shoulder)
-            Wrist Angle: +81.32° (Overextended wrist)
+            Ideal Ranges:
+            {ranges_str}
 
-            3, summarise by collating suggestions as seen,
-            Ex. Overextended Knee & Shoulder Angles → Possible rigid form; may cause inefficiency in power transfer.
-            Wrist Overextension → Could lead to inconsistent spin and trajectory.
-            Shot Trajectory (-80°) → This is likely a miscalculation or a major issue since the ideal range is 45°–55°. Check if the data source for this value is correct.
-            Release Height Slightly Low → This could be a timing issue or a lower-than-optimal release point.
+            Please provide:
 
-            NOTE: DO NOT ADD ANY ADDITIONAL COMMENTS ABOUT VIDEO QUALITY, CAMERA ANGLE, OR ACCURACY OF DATA.
+            1. Metric Analysis:
+            - Compare each metric to its ideal range
+            - Use ✅ for metrics within range and ❌ for those outside
+            - Format as: Metric (Current°) [✅/❌] Range (min°-max°)
+
+            2. Deviation Analysis:
+            - Calculate how far each metric is from ideal range
+            - Show + for over and - for under
+            - Focus on significant deviations
+
+            3. Form Improvement Summary:
+            - Group related issues (e.g., connected joint angles)
+            - Prioritize most critical adjustments
+            - Provide specific, actionable feedback
+            - Explain impact on shot effectiveness
+
+            NOTE: Focus only on the metrics and visual form. Do not comment on video quality or data accuracy.
             """
 
             # Generate content with video
@@ -152,17 +176,67 @@ class QuickAnalysisAgent:
             if response.prompt_feedback:
                 print("Prompt feedback:", response.prompt_feedback)
 
-            visual_analysis = response.text.split('\n\n')
-            recommendations = [line for line in visual_analysis if line.startswith(('Good:', 'Improve:', 'Tip:'))]
-            reasoning = [line for line in visual_analysis if not line.startswith(('Good:', 'Improve:', 'Tip:'))]
+            # Get the response text
+            response_text = response.text
             
+            # Split into main sections using the numbered headers
+            sections = {}
+            current_section = None
+            current_text = []
+            
+            for line in response_text.split('\n'):
+                # Check for main section headers
+                if '1. Metric Analysis:' in line:
+                    current_section = 'metric_analysis'
+                    current_text = []
+                elif '2. Deviation Analysis:' in line:
+                    if current_section:
+                        sections[current_section] = '\n'.join(current_text)
+                    current_section = 'deviation_analysis'
+                    current_text = []
+                elif '3. Form Improvement Summary:' in line:
+                    if current_section:
+                        sections[current_section] = '\n'.join(current_text)
+                    current_section = 'improvement_summary'
+                    current_text = []
+                elif 'Prioritized Adjustments:' in line:
+                    if current_section:
+                        sections[current_section] = '\n'.join(current_text)
+                    current_section = 'prioritized_adjustments'
+                    current_text = []
+                elif line.strip() and current_section:  # Add non-empty lines to current section
+                    current_text.append(line.strip())
+            
+            # Add the last section
+            if current_section and current_text:
+                sections[current_section] = '\n'.join(current_text)
+
+            # Construct the recommendations and reasoning
+            recommendations = []
+            if 'improvement_summary' in sections:
+                recommendations.append("Form Improvement Summary:")
+                recommendations.append(sections['improvement_summary'])
+            if 'prioritized_adjustments' in sections:
+                recommendations.append("\nPrioritized Adjustments:")
+                recommendations.append(sections['prioritized_adjustments'])
+
+            reasoning = []
+            if 'metric_analysis' in sections:
+                reasoning.append("Metric Analysis:")
+                reasoning.append(sections['metric_analysis'])
+            if 'deviation_analysis' in sections:
+                reasoning.append("\nDeviation Analysis:")
+                reasoning.append(sections['deviation_analysis'])
+
             return {
-                "visual_recommendations": " | ".join(recommendations) if recommendations else "",
-                "visual_reasoning": " | ".join(reasoning) if reasoning else ""
+                "visual_recommendations": '\n'.join(recommendations),
+                "visual_reasoning": '\n'.join(reasoning)
             }
 
         except Exception as e:
             print(f"Error in analyze_video: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 "visual_recommendations": "Error analyzing video",
                 "visual_reasoning": f"An error occurred: {str(e)}"
@@ -175,47 +249,14 @@ class QuickAnalysisAgent:
                 "coach_reasoning": "Unable to analyze shooting form without metrics data."
             }
 
-        metrics = ShootingMetrics.from_dict(metrics_list[0])  # Analyze first shot
+        metrics = metrics_list[0]  # Get first frame's metrics
         
-        # Get video analysis
-        video_analysis = self.analyze_video()
+        # Get video analysis with metrics
+        video_analysis = self.analyze_video(metrics)
         
-        # Generate analysis based on metrics
-        recommendations = []
-        reasoning = []
-
-        # Analyze elbow angle
-        if metrics.elbow_angle > metrics.ideal_ranges['elbow_angle'][1]:
-            recommendations.append("Keep your elbow slightly bent at release")
-            reasoning.append(f"Your elbow angle ({metrics.elbow_angle:.1f}°) is too straight. " 
-                           f"Ideal range is {metrics.ideal_ranges['elbow_angle'][0]}-{metrics.ideal_ranges['elbow_angle'][1]}°")
-
-        # Analyze shoulder angle
-        if metrics.shoulder_angle < metrics.ideal_ranges['shoulder_angle'][0]:
-            recommendations.append("Raise your shooting pocket higher")
-            reasoning.append(f"Your shoulder angle ({metrics.shoulder_angle:.1f}°) is too low. "
-                           f"Ideal range is {metrics.ideal_ranges['shoulder_angle'][0]}-{metrics.ideal_ranges['shoulder_angle'][1]}°")
-
-        # Analyze shot trajectory
-        if abs(metrics.shot_trajectory) > metrics.ideal_ranges['shot_trajectory'][1]:
-            recommendations.append("Adjust your shot arc to be more balanced")
-            reasoning.append(f"Your shot trajectory ({abs(metrics.shot_trajectory):.1f}°) is off. "
-                           f"Ideal range is {metrics.ideal_ranges['shot_trajectory'][0]}-{metrics.ideal_ranges['shot_trajectory'][1]}°")
-
-        # Analyze release height
-        if metrics.release_height_ratio > metrics.ideal_ranges['release_height_ratio'][1]:
-            recommendations.append("Lower your release point slightly")
-            reasoning.append(f"Your release height ratio ({metrics.release_height_ratio:.2f}) is too high. "
-                           f"Ideal range is {metrics.ideal_ranges['release_height_ratio'][0]}-{metrics.ideal_ranges['release_height_ratio'][1]}")
-
-        if not recommendations:
-            recommendations.append("Your shooting form looks good! Keep practicing for consistency.")
-            reasoning.append("All metrics are within ideal ranges.")
-
-        # Combine metric and video analysis with more weight on visual analysis
         return {
-            "coach_recommendations": video_analysis["visual_recommendations"] + " || Metrics-based tips: " + " | ".join(recommendations),
-            "coach_reasoning": video_analysis["visual_reasoning"] + " || Metric analysis: " + " | ".join(reasoning)
+            "coach_recommendations": video_analysis["visual_recommendations"],
+            "coach_reasoning": video_analysis["visual_reasoning"]
         }
 
 def initialize_agent(video_url: str = None):
@@ -242,7 +283,13 @@ def get_quick_analysis(metrics_data: list, video_url: str = None) -> Dict[str, s
     return result
 
 if __name__ == "__main__":
-    # Example usage
+    import os
+    from pathlib import Path
+
+    # Get the backend directory path
+    backend_dir = Path(__file__).parent.parent
+    
+    # Example usage with proper paths
     test_metrics = [{
         "elbow_angle": 172.15237249531512,
         "wrist_angle": 171.32183111475928,
@@ -255,37 +302,31 @@ if __name__ == "__main__":
         "torso_ratio": 0.36507936507936506,
         "release_height": 255,
         "ideal_ranges": {
-            "elbow_angle": [
-                165,
-                175
-            ],
-            "wrist_angle": [
-                70,
-                90
-            ],
-            "shoulder_angle": [
-                90,
-                110
-            ],
-            "knee_angle": [
-                140,
-                170
-            ],
-            "shot_trajectory": [
-                45,
-                55
-            ],
-            "release_height_ratio": [
-                1.8,
-                2.3
-            ],
-            "torso_ratio": [
-                0.3,
-                0.4
-            ]
+            "elbow_angle": [165, 175],
+            "wrist_angle": [70, 90],
+            "shoulder_angle": [90, 110],
+            "knee_angle": [140, 170],
+            "shot_trajectory": [45, 55],
+            "release_height_ratio": [1.8, 2.3],
+            "torso_ratio": [0.3, 0.4]
         }
     }]
     
-    video_path = "noisy_images/clip_001.mp4"
+    # Construct proper path to video
+    video_path = str(backend_dir / "noisy_images" / "clip_001.mp4")
+    
+    print(f"Initializing analysis for video: {video_path}")
+    print(f"With metrics: {test_metrics}")
+    
     result = get_quick_analysis(test_metrics, video_path)
-    print('RESULT FETCHED', result)
+    
+    print("\n" + "="*80)
+    print("COACH RECOMMENDATIONS:")
+    print("="*80)
+    print(result["coach_recommendations"])
+    
+    print("\n" + "="*80)
+    print("COACH REASONING:")
+    print("="*80)
+    print(result["coach_reasoning"])
+   
