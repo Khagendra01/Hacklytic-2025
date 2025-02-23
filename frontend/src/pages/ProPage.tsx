@@ -42,7 +42,7 @@ export function ProPage() {
   ]);
   const [isComputing, setIsComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>({img_url: "https://static.clubs.nfl.com/image/upload/t_editorial_landscape_12_desktop/redskins/kkxl66bwwpzzntcfgew1", rank: "A"});
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>();
   const [showDetails, setShowDetails] = useState(false);
   const [detailedData] = useState<DetailedAnalysis>({
     larry: {
