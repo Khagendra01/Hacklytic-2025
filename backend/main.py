@@ -1,15 +1,16 @@
-from typing import Union
-from agents.quick_analysis_agent import get_quick_analysis
-from shot_detector import ShotDetector
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import aiohttp
+import asyncio
 import os
 import uuid
-from preprocessing.noise_masking import NoiseReducer, MaskingConfig
+from typing import Union
+
+import aiohttp
+from agents.quick_analysis_agent import get_quick_analysis
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from firebase.firebase_storage import FirebaseStorageManager
-import asyncio
+from preprocessing.noise_masking import MaskingConfig, NoiseReducer
 from pydantic import BaseModel
+from shot_detector import ShotDetector
 
 app = FastAPI()
 
@@ -210,7 +211,7 @@ async def analyze_talent(request: VideoComparisonRequest):
             video1_path=video1_path,
             video2_path=video2_path
         )
-
+        print(f"Analysis: {analysis}")
         return {
             "status": "success",
             "video1_url": video1_url,

@@ -102,6 +102,8 @@ class TalentScoutAgent:
         Focus on form, mechanics, and technique. Be concise and technical.
         Do not mention video quality or camera angles.
         Provide a brief, focused analysis of the shooting mechanics and any notable technical aspects.
+
+        Be sure to keep to the correct structure format.
         """
 
         try:
